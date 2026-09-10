@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 import yfinance as yf
 
-st.set_page_config(page_title="Dashboard", page_icon=":bar_chart:", layout="wide")
+st.set_page_config(page_title="Dashboard", page_icon="bar_chart", layout="wide")
 st.title("📈 Live Market Dashboard")
 st.write("Welcome to the financial data hub. Let's pull some market data and visualize it in real-time.")
 
@@ -29,13 +29,13 @@ if tickers:
                     pct_change = ((end_price - start_price) / start_price) * 100
                     
                     with cols[i]:
-                        st.metric(label=ticker, value=f"{end_price:.2f}", delta=f"{pct_change:.2f}%")
-                        
+                        st.metric(label=ticker, value=f"${end_price:,.2f}", delta=f"{pct_change:.2f}%")
+
             st.subheader("Normalized Growth (%)")
             normalized_prices = (close_prices / close_prices.iloc[0] - 1) * 100
             fig = px.line(normalized_prices, title="Growth Trajectory (Rebased to 0%)", labels={'value': 'Cumulative Return (%)', 'variable': 'Ticker'})
             st.plotly_chart(fig, use_container_width=True)
-            
+
             with st.expander("View & Download Raw Data (Bypass Paywall)"):
                 st.dataframe(close_prices)
                 csv = close_prices.to_csv().encode('utf-8')
@@ -49,4 +49,4 @@ if tickers:
             st.error("No data found. Please check the ticker symbols.")
             
     except Exception as e:
-        st.error(f"An error occurred while fetching data: {e}") 
+        st.error(f"An error occurred while fetching data: {e}")
