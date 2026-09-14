@@ -2,122 +2,192 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import datetime
+import plotly.graph_objects as go
+from scipy.stats import gaussian_kde
 
-st.title("Portfolio Risk & ESG Optimizer")
-st.markdown("Institutional-grade portfolio analytics, downside risk (VaR), and sustainability tracking.")
+st.title("Portfolio Risk & Macro Stress Engine")
+st.caption("Institutional capital preservation, Value-at-Risk (VaR), and historical crisis stress-testing.")
 
-# --- PORTFOLIO CONSTRUCTION ---
-st.subheader("1. Portfolio Construction")
-col1, col2 = st.columns(2)
+# --- 1. PORTFOLIO ALLOCATION & CAPITAL ---
+st.subheader("1. Portfolio Construction & Capital Base")
+
+col1, col2, col3 = st.columns([2, 2, 1.5])
 with col1:
-    tickers_input = st.text_input("Enter Tickers (comma-separated):", "AAPL, MSFT, TSLA, JNJ")
+    tickers_input = st.text_input("Portfolio Tickers (comma-separated):", value="AAPL, MSFT, TSLA, JNJ")
 with col2:
-    weights_input = st.text_input("Enter Weights (%) (must total 100):", "40, 30, 20, 10")
+    weights_input = st.text_input("Portfolio Weights (%) (must total 100):", value="35, 30, 15, 20")
+with col3:
+    portfolio_capital = st.number_input("Portfolio Value ($ / R):", value=1_000_000, step=100_000)
 
-# Clean inputs
-tickers = [t.strip().upper() for t in tickers_input.split(',')]
+# Parsing & Validation
+tickers = [t.strip().upper() for t in tickers_input.split(',') if t.strip()]
 try:
-    weights = np.array([float(w.strip())/100 for w in weights_input.split(',')])
-except:
-    st.error("Please enter valid numbers for weights.")
+    weights = np.array([float(w.strip()) / 100 for w in weights_input.split(',') if w.strip()])
+except ValueError:
+    st.error("Please enter valid numerical values for weights.")
     st.stop()
 
 if len(tickers) != len(weights):
-    st.error("The number of tickers must match the number of weights.")
+    st.error("The count of tickers must match the count of weights.")
     st.stop()
 
 if not np.isclose(sum(weights), 1.0):
-    st.warning("Weights do not equal 100%. Automatically normalizing...")
     weights = weights / np.sum(weights)
+    st.info("Weights normalized automatically to 100%.")
 
-# --- DATA FETCHING & MATH ---
-with st.spinner("Fetching 5-year historical data & computing covariance matrices..."):
-    # Download historical close prices
-    data = yf.download(tickers, period="5y")['Close']
+# --- 2. DATA ACQUISITION & ENGINE MATH ---
+with st.spinner("Executing risk algorithms across historical datasets..."):
+    # Download 5 years of daily closing prices
+    raw_data = yf.download(tickers, period="5y", progress=False)['Close']
     
-    # If only one ticker is entered, yf.download returns a Series. Convert to DataFrame.
-    if isinstance(data, pd.Series):
-        data = data.to_frame(tickers[0])
+    if isinstance(raw_data, pd.Series):
+        raw_data = raw_data.to_frame(tickers[0])
         
-    # Calculate daily returns and drop NAs
-    returns = data.pct_change().dropna()
+    daily_returns = raw_data.pct_change().dropna()
     
-    # Portfolio historical daily returns
-    port_returns = returns.dot(weights)
+    # Portfolio daily returns series
+    portfolio_returns = daily_returns.dot(weights)
     
-    # --- RISK MATH ---
-    # 1. Historical Value at Risk (95% Confidence)
-    var_95 = np.percentile(port_returns, 5)
+    # Core Risk Metrics
+    var_95 = np.percentile(portfolio_returns, 5)
+    cash_var_95 = portfolio_capital * abs(var_95)
     
-    # 2. Maximum Drawdown
-    cumulative_returns = (1 + port_returns).cumprod()
-    peak = cumulative_returns.cummax()
-    drawdown = (cumulative_returns - peak) / peak
-    max_drawdown = drawdown.min()
+    # Annualized Performance Metrics (252 trading days)
+    ann_return = portfolio_returns.mean() * 252
+    ann_volatility = portfolio_returns.std() * np.sqrt(252)
+    risk_free_rate = 0.042  # 4.2% Benchmark
     
-    # 3. Annualized Volatility
-    ann_volatility = port_returns.std() * np.sqrt(252)
+    sharpe_ratio = (ann_return - risk_free_rate) / ann_volatility if ann_volatility else 0
+    
+    # Downside deviation for Sortino Ratio
+    downside_returns = portfolio_returns[portfolio_returns < 0]
+    downside_volatility = downside_returns.std() * np.sqrt(252)
+    sortino_ratio = (ann_return - risk_free_rate) / downside_volatility if downside_volatility else 0
+    
+    # Maximum Drawdown
+    cumulative_growth = (1 + portfolio_returns).cumprod()
+    peak = cumulative_growth.cummax()
+    drawdowns = (cumulative_growth - peak) / peak
+    max_drawdown = drawdowns.min()
 
-# --- ENTERPRISE RISK METRICS ---
+# --- 3. EXECUTIVE RISK SUMMARY ---
 st.divider()
-st.subheader("2. Enterprise Risk Metrics")
-st.caption("Evaluating capital preservation and downside exposure.")
+st.subheader("2. Enterprise Risk & Downside Exposure")
 
-rm_col1, rm_col2, rm_col3 = st.columns(3)
-with rm_col1:
-    st.metric("Historical VaR (95%)", f"{var_95*100:.2f}%", help="In 95% of trading days, the portfolio will not lose more than this percentage.")
-with rm_col2:
-    st.metric("Maximum Drawdown", f"{max_drawdown*100:.2f}%", help="The absolute worst peak-to-trough drop over the last 5 years.")
-with rm_col3:
-    st.metric("Annualized Volatility", f"{ann_volatility*100:.2f}%", help="Standard deviation of annualized returns.")
+m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+with m_col1:
+    st.metric(
+        "Historical 1-Day VaR (95%)", 
+        f"{var_95 * 100:.2f}%", 
+        help="In 95% of trading days, daily loss will not exceed this percentage."
+    )
+with m_col2:
+    st.metric(
+        "1-Day Cash at Risk", 
+        f"${cash_var_95:,.0f}", 
+        help="Maximum expected capital loss over a single trading day at 95% confidence."
+    )
+with m_col3:
+    st.metric(
+        "Sortino Ratio", 
+        f"{sortino_ratio:.2f}", 
+        help="Return per unit of bad (downside) volatility. > 1.0 indicates strong risk control."
+    )
+with m_col4:
+    st.metric(
+        "Max Peak-to-Trough Drawdown", 
+        f"{max_drawdown * 100:.2f}%", 
+        help="Worst loss experienced from historical peak to trough over 5 years."
+    )
 
-# --- TAIL RISK VISUALIZATION ---
+# --- 4. INTERACTIVE PLOTLY DISTRIBUTION (TAIL RISK) ---
 st.divider()
-st.subheader("3. Daily Returns Distribution (Tail Risk)")
-st.caption("The red line indicates the 95% VaR threshold. Everything to the left is a tail-risk event.")
+st.subheader("3. Interactive Tail-Risk Distribution")
+st.caption("Hover over the distribution curve to inspect frequencies. Shaded crimson area highlights extreme tail-risk loss days.")
 
-fig, ax = plt.subplots(figsize=(10, 4))
-# Plot histogram of returns
-ax.hist(port_returns * 100, bins=50, color='#3b82f6', alpha=0.7, edgecolor='black')
+# Generate KDE Curve
+kde = gaussian_kde(portfolio_returns * 100)
+x_range = np.linspace((portfolio_returns * 100).min(), (portfolio_returns * 100).max(), 500)
+y_density = kde(x_range)
 
-# Add VaR line
-ax.axvline(var_95 * 100, color='red', linestyle='dashed', linewidth=2, label=f'95% VaR ({var_95*100:.2f}%)')
+fig = go.Figure()
 
-ax.set_title("Portfolio Historical Return Distribution", fontsize=12)
-ax.set_xlabel("Daily Return (%)")
-ax.set_ylabel("Frequency (Days)")
-ax.legend()
+# Plot full density curve
+fig.add_trace(go.Scatter(
+    x=x_range, 
+    y=y_density, 
+    mode='lines', 
+    line=dict(color='#2563eb', width=2.5), 
+    name='Return Distribution'
+))
 
-st.pyplot(fig)
+# Shade Tail Risk Zone (< VaR 95%)
+x_tail = x_range[x_range <= (var_95 * 100)]
+y_tail = y_density[:len(x_tail)]
+fig.add_trace(go.Scatter(
+    x=np.concatenate(([x_tail[0]], x_tail, [x_tail[-1]])),
+    y=np.concatenate(([0], y_tail, [0])),
+    fill='toself',
+    fillcolor='rgba(239, 68, 68, 0.4)',
+    line=dict(color='rgba(239, 68, 68, 0.8)', width=1.5),
+    name=f'Tail Risk Zone (95% VaR: {var_95*100:.2f}%)'
+))
 
-# --- ESG & SUSTAINABILITY ---
-st.divider()
-st.subheader("4. ESG & Sustainability Risk Matrix")
-st.caption("Note: Live institutional ESG scoring generally requires a Bloomberg/Refinitiv terminal. This UI demonstrates the screening architecture using simulated API fallbacks.")
-
-# Generate proxy ESG data to demonstrate the UI structure
-esg_data = []
-for i, t in enumerate(tickers):
-    # Static seed ensures the proxy data stays consistent when you change weights
-    np.random.seed(len(t) + i) 
-    env_score = np.random.uniform(5, 20)
-    soc_score = np.random.uniform(5, 20)
-    gov_score = np.random.uniform(5, 15)
-    
-    esg_data.append({
-        "Ticker": t,
-        "Environment Risk": env_score,
-        "Social Risk": soc_score,
-        "Governance Risk": gov_score,
-        "Total ESG Risk": env_score + soc_score + gov_score
-    })
-    
-df_esg = pd.DataFrame(esg_data).set_index("Ticker")
-
-# Highlight lower risk (better) in green, higher risk in red
-st.dataframe(
-    df_esg.style.background_gradient(cmap="RdYlGn_r", axis=0).format("{:.1f}"),
-    use_container_width=True
+# VaR Cutoff Threshold Line
+fig.add_vline(
+    x=var_95 * 100, 
+    line_dash="dash", 
+    line_color="#dc2626", 
+    annotation_text=f"VaR Cutoff: {var_95*100:.2f}%", 
+    annotation_position="top left"
 )
+
+fig.update_layout(
+    xaxis_title="Daily Return (%)",
+    yaxis_title="Probability Density",
+    margin=dict(l=20, r=20, t=30, b=20),
+    template="plotly_white",
+    hovermode="x unified",
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# --- 5. HISTORICAL CRISIS STRESS-TESTING ---
+st.divider()
+st.subheader("4. Historical Stress-Testing (Scenario Simulation)")
+st.caption("Estimated portfolio impact during recognized macroeconomic drawdown regimes.")
+
+# Filter returns by historical crisis windows
+covid_crash = portfolio_returns.loc['2020-02-19':'2020-03-23'] if '2020-02-19' in portfolio_returns.index else pd.Series(dtype=float)
+rate_hike_2022 = portfolio_returns.loc['2022-01-03':'2022-10-14'] if '2022-01-03' in portfolio_returns.index else pd.Series(dtype=float)
+
+scenarios = []
+
+# COVID Crash Impact
+if not covid_crash.empty:
+    covid_drawdown = ((1 + covid_crash).cumprod().iloc[-1] - 1) * 100
+    scenarios.append({
+        "Macro Scenario": "2020 COVID-19 Flash Crash (Feb–Mar 2020)",
+        "Observed Impact (%)": f"{covid_drawdown:.2f}%",
+        "Estimated Capital Loss": f"${(portfolio_capital * abs(covid_drawdown)/100):,.0f}"
+    })
+
+# 2022 Rate Shock Impact
+if not rate_hike_2022.empty:
+    rate_drawdown = ((1 + rate_hike_2022).cumprod().iloc[-1] - 1) * 100
+    scenarios.append({
+        "Macro Scenario": "2022 Inflation & Rate Hike Shock (Jan–Oct 2022)",
+        "Observed Impact (%)": f"{rate_drawdown:.2f}%",
+        "Estimated Capital Loss": f"${(portfolio_capital * abs(rate_drawdown)/100):,.0f}"
+    })
+
+# Instant Shock Simulation
+scenarios.append({
+    "Macro Scenario": "Hypothetical Instant Market Shock (-5% Index Crash)",
+    "Observed Impact (%)": "-5.00%",
+    "Estimated Capital Loss": f"${(portfolio_capital * 0.05):,.0f}"
+})
+
+df_scenarios = pd.DataFrame(scenarios).set_index("Macro Scenario")
+st.table(df_scenarios)
