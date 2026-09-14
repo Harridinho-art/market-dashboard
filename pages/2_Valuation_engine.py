@@ -31,9 +31,29 @@ with st.spinner(f"Pulling financial data and calculating DCF for {ticker_input.u
 
     st.divider()
     st.subheader("Historical Free Cash Flow")
-    # Reverse the series so chronological order is left-to-right on the chart
-    st.bar_chart(fcf.dropna().iloc[::-1])
-
+    
+    # Drop missing data and sort chronologically (oldest to newest)
+    fcf_clean = fcf.dropna().iloc[::-1]
+    
+    # Create dynamic columns for however many years of data yfinance returns
+    fcf_cols = st.columns(len(fcf_clean))
+    
+    for i, (date, value) in enumerate(fcf_clean.items()):
+        # Calculate Year-over-Year (YoY) growth for the delta indicator
+        if i == 0:
+            yoy_delta = None
+        else:
+            prev_val = fcf_clean.iloc[i-1]
+            yoy = ((value - prev_val) / abs(prev_val)) * 100
+            yoy_delta = f"{yoy:.2f}% YoY"
+            
+        with fcf_cols[i]:
+            # Extract just the year for a clean label (e.g., "FY 2023")
+            st.metric(
+                label=f"FY {date.year}", 
+                value=f"${value:,.0f}", 
+                delta=yoy_delta
+            )
     # --- INTERACTIVE DCF ASSUMPTIONS ---
     st.divider()
     st.subheader("DCF Model Assumptions")
