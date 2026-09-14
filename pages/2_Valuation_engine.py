@@ -1,7 +1,10 @@
 import yfinance as yf
 import pandas as pd
+import streamlit as st
 
-ticker_input=input("Enter a stock ticker(e.g., AAPL, MSFT, TSLA): ")
+st.title("Stock Valuation Engine")
+
+ticker_input=st.text_input("Enter a stock ticker(e.g., AAPL, MSFT, TSLA): ", value="AAPL")
 target_company = yf.Ticker(ticker_input.upper())
 
 income_statement = target_company.income_stmt
@@ -13,11 +16,15 @@ operating_income = income_statement.loc['Operating Income']
 
 operating_margin = operating_income / revenue
 
-print("\n---Total Revenue---")
-print(revenue)
+st.subheader("Financial Overview (Latest Year)")
+col1, col2 = st.columns(2)
 
-print("\n---Operating Margin (%)---")
-print(operating_margin * 100)
+# yfinance returns data for multiple years. 
+# We use .iloc[0] to grab the most recent year so it formats beautifully in the metric card.
+with col1:
+    st.metric(label="Total Revenue", value=f"${revenue.iloc[0]:,.0f}")
+with col2:
+    st.metric(label="Operating Margin", value=f"{operating_margin.iloc[0] * 100:.2f}%")
 
 fcf= cash_flow.loc['Operating Cash Flow'] + cash_flow.loc['Capital Expenditure']
 
