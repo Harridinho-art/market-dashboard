@@ -165,3 +165,43 @@ with st.spinner(f"Pulling financial data and calculating DCF for {ticker_input.u
         df_sens.style.background_gradient(cmap="RdYlGn", axis=None).format("${:.2f}"),
         use_container_width=True
     )
+    # --- PHASE 3: RELATIVE VALUATION (COMPS) ---
+    st.divider()
+    st.subheader("Relative Valuation (Comps Analysis)")
+    st.caption("Compare valuation multiples against industry peers. Lower multiples (green) typically indicate cheaper valuations.")
+
+    # Let the user input competitors
+    peer_input = st.text_input("Enter peer tickers separated by commas (e.g., MSFT, GOOG, META):", value="MSFT, GOOG")
+
+    if peer_input:
+        peers = [p.strip().upper() for p in peer_input.split(',')]
+        # Combine the target company with the peers for the table
+        tickers_to_compare = [ticker_input.upper()] + peers
+        
+        comps_data = []
+        with st.spinner("Fetching real-time peer multiples..."):
+            for t in tickers_to_compare:
+                try:
+                    comp_tkr = yf.Ticker(t)
+                    info = comp_tkr.info
+                    comps_data.append({
+                        "Ticker": t,
+                        "P/E (Trailing)": info.get('trailingPE', None),
+                        "P/E (Forward)": info.get('forwardPE', None),
+                        "EV / EBITDA": info.get('enterpriseToEbitda', None),
+                        "Price / Book": info.get('priceToBook', None)
+                    })
+                except:
+                    pass # Skip quietly if a ticker is invalid
+            
+            if comps_data:
+                # Convert to DataFrame and set Ticker as the row index
+                df_comps = pd.DataFrame(comps_data).set_index("Ticker")
+                
+                # Render table: Highlights the lowest multiple in green, highest in red
+                st.dataframe(
+                    df_comps.style.format("{:.2f}", na_rep="N/A")
+                    .highlight_min(color='#a8d08d')  # Soft green
+                    .highlight_max(color='#ff9999'), # Soft red
+                    use_container_width=True
+                )
