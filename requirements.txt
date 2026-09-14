@@ -2,3 +2,6 @@ yfinance
 pandas
 plotly
 streamlit
+thefuzz
+pdfplumber
+xlsxwriter
