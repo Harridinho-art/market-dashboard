@@ -48,12 +48,13 @@ with st.spinner(f"Pulling financial data and calculating DCF for {ticker_input.u
             yoy_delta = f"{yoy:.2f}% YoY"
             
         with fcf_cols[i]:
-            # Extract just the year for a clean label (e.g., "FY 2023")
+            # Scale to billions for clean UI rendering
             st.metric(
                 label=f"FY {date.year}", 
-                value=f"${value/1e9:,.2f}B", 
+                value=f"${value / 1e9:.2f}B", 
                 delta=yoy_delta
             )
+
     # --- INTERACTIVE DCF ASSUMPTIONS ---
     st.divider()
     st.subheader("DCF Model Assumptions")
@@ -62,8 +63,30 @@ with st.spinner(f"Pulling financial data and calculating DCF for {ticker_input.u
     colA, colB, colC = st.columns(3)
     with colA:
         growth_rate = st.number_input("5-Year Growth Rate (%)", value=5.0, step=0.5) / 100
+        
     with colB:
-        discount_rate = st.number_input("Discount Rate/WACC (%)", value=9.0, step=0.5) / 100
+        # PHASE 1: Auto-WACC (CAPM)
+        auto_wacc = st.checkbox("Auto-Calculate WACC (CAPM)")
+        if auto_wacc:
+            # Fetch 10-Year Treasury Yield for Risk-Free Rate
+            try:
+                tnx = yf.Ticker("^TNX")
+                risk_free_rate = tnx.info.get('regularMarketPreviousClose', 4.0) / 100
+            except:
+                risk_free_rate = 0.042 # Fallback to 4.2% if API fails
+            
+            # Fetch stock beta
+            beta = target_company.info.get('beta', 1.0)
+            market_risk_premium = 0.055 # Standard 5.5% ERP
+            
+            # Calculate CAPM
+            discount_rate = risk_free_rate + (beta * market_risk_premium)
+            
+            st.metric("Calculated WACC", f"{discount_rate * 100:.2f}%", 
+                      help=f"Risk-Free Rate: {risk_free_rate*100:.2f}% | Beta: {beta}")
+        else:
+            discount_rate = st.number_input("Discount Rate/WACC (%)", value=9.0, step=0.5) / 100
+            
     with colC:
         perpetual_growth_rate = st.number_input("Perpetual Growth (%)", value=2.5, step=0.1) / 100
 
