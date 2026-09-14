@@ -6,3 +6,4 @@ thefuzz
 pdfplumber
 xlsxwriter
 matplotlib
+scipy
