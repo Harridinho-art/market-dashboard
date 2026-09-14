@@ -51,7 +51,7 @@ with st.spinner(f"Pulling financial data and calculating DCF for {ticker_input.u
             # Extract just the year for a clean label (e.g., "FY 2023")
             st.metric(
                 label=f"FY {date.year}", 
-                value=f"${value:,.0f}", 
+                value=f"${value/1e9:,.2f}B", 
                 delta=yoy_delta
             )
     # --- INTERACTIVE DCF ASSUMPTIONS ---
