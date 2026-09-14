@@ -125,3 +125,43 @@ with st.spinner(f"Pulling financial data and calculating DCF for {ticker_input.u
                   delta_color="normal")
     with val_col3:
         st.metric("Implied Enterprise Value", f"${enterprise_value / 1e9:,.2f}B")
+
+    # --- PHASE 2: SENSITIVITY ANALYSIS MATRIX ---
+    st.divider()
+    st.subheader("Sensitivity Analysis (Intrinsic Value)")
+    st.caption("Matrix showing estimated share price across WACC (Y-axis) and Terminal Growth (X-axis) variations.")
+
+    # Generate ranges for WACC (+/- 1% in 0.5% steps) and Growth (+/- 0.5% in 0.25% steps)
+    wacc_range = [discount_rate - 0.01, discount_rate - 0.005, discount_rate, discount_rate + 0.005, discount_rate + 0.01]
+    tg_range = [perpetual_growth_rate - 0.005, perpetual_growth_rate - 0.0025, perpetual_growth_rate, perpetual_growth_rate + 0.0025, perpetual_growth_rate + 0.005]
+
+    sensitivity_table = []
+    for w in wacc_range:
+        row = []
+        for g in tg_range:
+            # Prevent division by zero or negative valuations if growth exceeds WACC
+            if w <= g:
+                row.append(0)
+                continue
+                
+            # Recalculate PV of FCFs and Terminal Value for each cell
+            temp_pv_fcfs = [(latest_fcf * (1 + growth_rate)**yr) / ((1 + w)**yr) for yr in range(1, 6)]
+            temp_tv = (temp_pv_fcfs[-1] * (1 + g)) / (w - g)
+            temp_dtv = temp_tv / ((1 + w) ** 5)
+            
+            temp_ev = sum(temp_pv_fcfs) + temp_dtv
+            temp_price = temp_ev / shares_outstanding if shares_outstanding else 0
+            row.append(temp_price)
+            
+        sensitivity_table.append(row)
+
+    # Format the DataFrame into a heat map
+    df_sens = pd.DataFrame(sensitivity_table, 
+                           index=[f"{w*100:.1f}%" for w in wacc_range], 
+                           columns=[f"{g*100:.2f}%" for g in tg_range])
+
+    # Render as a styled grid on the dashboard
+    st.dataframe(
+        df_sens.style.background_gradient(cmap="RdYlGn", axis=None).format("${:.2f}"),
+        use_container_width=True
+    )
