@@ -191,3 +191,47 @@ scenarios.append({
 
 df_scenarios = pd.DataFrame(scenarios).set_index("Macro Scenario")
 st.table(df_scenarios)
+# --- 5. ESG & STEWARDSHIP SCREENING ---
+st.divider()
+st.subheader("5. ESG & Sustainability Risk Matrix")
+st.caption("Responsible investment screening aligned with institutional mandates (e.g., CRISA 2, UN PRI). Simulated proxy scores demonstrate terminal architecture.")
+
+esg_records = []
+weighted_esg_total = 0.0
+
+# Generate consistent deterministic proxy data per ticker
+for t, w in zip(tickers, weights):
+    seed = sum(ord(c) for c in t)
+    np.random.seed(seed)
+    e_score = round(np.random.uniform(5, 20), 1)
+    s_score = round(np.random.uniform(5, 20), 1)
+    g_score = round(np.random.uniform(5, 15), 1)
+    total = round(e_score + s_score + g_score, 1)
+    
+    weighted_esg_total += total * w
+    
+    esg_records.append({
+        "Ticker": t,
+        "Weight": f"{w*100:.1f}%",
+        "Environmental": e_score,
+        "Social": s_score,
+        "Governance": g_score,
+        "Total ESG Risk": total
+    })
+
+df_esg = pd.DataFrame(esg_records).set_index("Ticker")
+
+# Portfolio Weighted Metric Card
+esg_col1, esg_col2 = st.columns([1, 2])
+with esg_col1:
+    st.metric(
+        "Portfolio Weighted ESG Risk", 
+        f"{weighted_esg_total:.1f}", 
+        help="Sustainalytics scale: 0-10 Negligible, 10-20 Low, 20-30 Medium, 30-40 High, 40+ Severe."
+    )
+
+# Heatmap Table (Lower score = Green, Higher risk = Red)
+st.dataframe(
+    df_esg.style.background_gradient(cmap="RdYlGn_r", subset=["Environmental", "Social", "Governance", "Total ESG Risk"]),
+    use_container_width=True
+)
