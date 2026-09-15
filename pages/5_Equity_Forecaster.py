@@ -9,6 +9,7 @@ st.markdown("Test how economic shifts impact company profits and your future div
 
 # --- 1. UNIVERSAL SIDEBAR ---
 st.sidebar.header("Stock Selection")
+st.sidebar.caption("Use '.JO' for JSE listed stocks (e.g., SHP.JO).")
 ticker = st.sidebar.text_input("Enter Ticker (e.g., SHP.JO, AAPL, FSR.JO):", value="SHP.JO").upper()
 
 st.sidebar.divider()
@@ -41,18 +42,25 @@ def fetch_company_data(t_symbol):
         
         total_debt = bs.loc['Total Debt'].iloc[0] if 'Total Debt' in bs.index else 0
         shares = info.get('sharesOutstanding', 1)
-        current_price = info.get('currentPrice', info.get('previousClose', 0))
         
-        # Calculate derived baselines
+        # --- THE JSE MATH FIX ---
+        # Yahoo Finance reports JSE (.JO) prices in CENTS, but income statements in RANDS.
+        # We divide the raw price by 100 for SA stocks to get the actual Rand price.
+        raw_price = info.get('currentPrice', info.get('previousClose', 0))
+        current_price = raw_price / 100 if t_symbol.endswith('.JO') else raw_price
+        
+        # Calculate derived baselines purely from the income statement
         opex = rev - ebit
         tax_rate = (pretax - net_inc) / pretax if pretax > 0 else 0.27 
         base_eps = net_inc / shares if shares else 0
         
-        # Dividend logic
-        div_yield = info.get('dividendYield', 0)
-        base_div_per_share = div_yield * current_price if div_yield else 0
-        payout_ratio = base_div_per_share / base_eps if base_eps > 0 else 0
-        payout_ratio = min(max(payout_ratio, 0), 1) 
+        # Use the API's native payout ratio to avoid currency mismatch errors entirely
+        payout_ratio = info.get('payoutRatio', 0)
+        if payout_ratio is None:
+            payout_ratio = 0
+            
+        base_div_per_share = base_eps * payout_ratio
+        # -------------------------
         
         company_name = info.get('shortName', t_symbol)
         
@@ -76,12 +84,10 @@ if not data:
 sym = data["Symbol"]
 
 # --- 3. APPLYING THE SHOCKS ---
-# 1. Base the perfect mathematical starting point
 base_pretax = data["Revenue"] - data["OpEx"] - data["Interest"]
 base_tax_paid = base_pretax * data["Tax Rate"] if base_pretax > 0 else 0
 base_net_inc = base_pretax - base_tax_paid
 
-# 2. Shock the metrics
 shocked_rev = data["Revenue"] * (1 + (rev_shock / 100))
 shocked_opex = data["OpEx"] * (1 + (cost_shock / 100))
 shocked_interest = data["Interest"] + (data["Total Debt"] * rate_shock_bps)
