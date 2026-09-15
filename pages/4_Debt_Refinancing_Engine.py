@@ -245,16 +245,23 @@ for r_bps in repo_shocks:
 df_matrix = pd.DataFrame(
     matrix_data,
     index=[f"+{r} bps Repo" for r in repo_shocks],
-    columns=[f"+{s} bps Spread" for s_bps in spread_shocks for s in [s_bps]]
+    columns=[f"+{s} bps Spread" for s in spread_shocks]
 )
 
 def highlight_covenant_breaches(val):
     if val < 2.5:
-        return 'background-color: #fee2e2; color: #991b1b; font-weight: bold' # Red
+        return 'background-color: #fee2e2; color: #991b1b; font-weight: bold' # Red (Breach)
     elif val < 3.0:
-        return 'background-color: #fef9c3; color: #854d0e' # Yellow
+        return 'background-color: #fef9c3; color: #854d0e' # Yellow (Borderline)
     else:
-        return 'background-color: #dcfce7; color: #166534' # Green
+        return 'background-color: #dcfce7; color: #166534' # Green (Safe)
 
-st.dataframe(df_matrix.style.applymap(highlight_covenant_breaches), use_container_width=True)
-st.caption("Legend: 🟩 Safe (>= 3.0x) | 🟨 Borderline (2.5x - 3.0x) | 🟥 Covenant Breach (< 2.5x)")
+# Format with 'x' and handle both Pandas versions (.map vs .applymap)
+styler = df_matrix.style.format("{:.2f}x")
+if hasattr(styler, "map"):
+    styled_matrix = styler.map(highlight_covenant_breaches)
+else:
+    styled_matrix = styler.applymap(highlight_covenant_breaches)
+
+st.dataframe(styled_matrix, use_container_width=True)
+st.caption("Legend: 🟩 Safe (≥ 3.0x) | 🟨 Borderline (2.5x - 3.0x) | 🟥 Covenant Breach (< 2.5x)")
