@@ -7,9 +7,13 @@ st.set_page_config(page_title="CVP & Break-Even Engine", layout="wide")
 st.title("Strategic FP&A: CVP & Break-Even Engine")
 st.markdown("Transform static accounting ledgers into forward-looking operational intelligence and break-even analysis.")
 
-# --- 1. DATA INGESTION (DUAL MODE) ---
+# --- 1. DATA INGESTION (DUAL MODE: CSV & EXCEL) ---
 st.sidebar.header("Data Ingestion")
-uploaded_file = st.sidebar.file_uploader("Upload Income Statement (CSV)", type="csv", help="Must contain 'Category', 'Classification' (Fixed/Variable/Revenue), and 'Amount' columns.")
+uploaded_file = st.sidebar.file_uploader(
+    "Upload Income Statement (CSV or Excel)", 
+    type=["csv", "xlsx", "xls"], 
+    help="Must contain 'Category', 'Classification' (Fixed/Variable/Revenue), and 'Amount' columns."
+)
 
 # Fallback Demo Data so the app is never blank
 if uploaded_file is None:
@@ -22,9 +26,13 @@ if uploaded_file is None:
     df = pd.DataFrame(data)
 else:
     try:
-        df = pd.read_csv(uploaded_file)
+        # Check the file extension and use the correct Pandas reader
+        if uploaded_file.name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file)
+        else:
+            df = pd.read_excel(uploaded_file)
     except Exception as e:
-        st.error("Error reading file. Please ensure it is a valid CSV.")
+        st.error("Error reading file. Please ensure it is a valid CSV or Excel document.")
         st.stop()
 
 # --- 2. OPERATIONAL BUDGETING SHOCKS ---
@@ -121,29 +129,27 @@ fig_cvp.update_layout(
 )
 st.plotly_chart(fig_cvp, use_container_width=True)
 
-# --- 6. UI: THE PROFIT WATERFALL ---
+# --- 6. UI: THE PROFIT CONVERSION FUNNEL ---
 st.divider()
-st.subheader("3. Net Operating Profit (EBIT) Synthesis")
+st.subheader("3. Profit Conversion Funnel")
+st.caption("Tracking how much of your Gross Revenue survives the operational cost structure to become Net Profit.")
 
-fig_waterfall = go.Figure(go.Waterfall(
-    name="FP&A Synthesis", orientation="v",
-    measure=["relative", "relative", "total", "relative", "total"],
-    x=["Gross Revenue", "Variable Costs", "Contribution Margin", "Fixed Costs", "Net Operating Profit (EBIT)"],
-    textposition="outside",
-    y=[new_revenue, -new_vc, new_cm, -new_fc, new_ebit],
-    connector={"line":{"color":"rgb(63, 63, 63)"}},
-    decreasing={"marker":{"color":"#ef4444"}},
-    increasing={"marker":{"color":"#22c55e"}},
-    totals={"marker":{"color":"#2563eb"}}
+# Determine the color of the final EBIT bar (Green for profit, Red for loss)
+ebit_color = "#22c55e" if new_ebit >= 0 else "#ef4444"
+
+fig_funnel = go.Figure(go.Funnel(
+    y=["Gross Revenue", "Contribution Margin (After VC)", "Net Operating Profit (After FC)"],
+    x=[new_revenue, new_cm, new_ebit],
+    textinfo="value+percent initial",
+    marker={"color": ["#1e293b", "#3b82f6", ebit_color]}
 ))
 
-fig_waterfall.update_layout(
-    showlegend=False,
+fig_funnel.update_layout(
     template="plotly_white",
     margin=dict(t=40, b=40)
 )
-st.plotly_chart(fig_waterfall, use_container_width=True)
+st.plotly_chart(fig_funnel, use_container_width=True)
 
-# Raw Ledger Data View
+# --- 7. RAW DATA VIEWER ---
 with st.expander("View Raw Accounting Ledger Data"):
     st.dataframe(df.style.format({"Amount": "R {:,.0f}"}), use_container_width=True)
