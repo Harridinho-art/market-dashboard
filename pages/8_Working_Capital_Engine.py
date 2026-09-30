@@ -220,10 +220,7 @@ with col_fund2:
     else:
         st.success("**Optimization Achieved**")
         st.markdown(f"Your adjusted policies have shrunk the cash gap by **{abs(ccc_delta):.0f} days**, freeing up **{sym}{abs(funding_delta):,.0f}** in trapped cash. This reduces reliance on expensive short-term debt.")
-      import streamlit as st
-import pandas as pd
-import numpy as np
-
+     
 st.divider()
 st.subheader("Working Capital Sub-Ledger Drill-Down")
 st.caption("Granular view of the underlying ledgers driving the Cash Conversion Cycle.")
