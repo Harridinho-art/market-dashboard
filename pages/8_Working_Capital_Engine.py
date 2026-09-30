@@ -220,3 +220,47 @@ with col_fund2:
     else:
         st.success("**Optimization Achieved**")
         st.markdown(f"Your adjusted policies have shrunk the cash gap by **{abs(ccc_delta):.0f} days**, freeing up **{sym}{abs(funding_delta):,.0f}** in trapped cash. This reduces reliance on expensive short-term debt.")
+      import streamlit as st
+import pandas as pd
+import numpy as np
+
+st.divider()
+st.subheader("Working Capital Sub-Ledger Drill-Down")
+st.caption("Granular view of the underlying ledgers driving the Cash Conversion Cycle.")
+
+# Create tabs for the three core working capital components
+tab_ar, tab_ap, tab_inv = st.tabs(["Accounts Receivable (A/R)", "Accounts Payable (A/P)", "Inventory Valuation"])
+
+with tab_ar:
+    st.markdown("**Active A/R Ledger**")
+    # Example sub-ledger data - replace with your actual data source
+    ar_data = pd.DataFrame({
+        "Customer ID": ["CUST-001", "CUST-002", "CUST-003", "CUST-004"],
+        "Industry": ["Mining", "Logistics", "Retail", "Manufacturing"],
+        "Invoice Date": ["2026-08-15", "2026-09-01", "2026-09-10", "2026-09-25"],
+        "Amount (ZAR)": [450000, 125000, 89000, 320000],
+        "Days Outstanding": [46, 29, 20, 5]
+    })
+    st.dataframe(ar_data, use_container_width=True, hide_index=True)
+    st.metric("Total Unsettled A/R", f"R {ar_data['Amount (ZAR)'].sum():,.2f}")
+
+with tab_ap:
+    st.markdown("**Active A/P Ledger**")
+    ap_data = pd.DataFrame({
+        "Vendor ID": ["VEND-99", "VEND-42", "VEND-11"],
+        "Category": ["Heavy Machinery", "Consulting", "Raw Materials"],
+        "Due Date": ["2026-10-05", "2026-10-15", "2026-10-20"],
+        "Amount (ZAR)": [850000, 45000, 620000]
+    })
+    st.dataframe(ap_data, use_container_width=True, hide_index=True)
+
+with tab_inv:
+    st.markdown("**Inventory Sub-Ledger (FIFO Valuation)**")
+    inv_data = pd.DataFrame({
+        "SKU": ["SKU-A1", "SKU-B2", "SKU-C3"],
+        "Warehouse Location": ["eMalahleni Hub", "Richards Bay", "Centurion"],
+        "Units on Hand": [1200, 450, 8900],
+        "Unit Cost (ZAR)": [125.50, 890.00, 45.20]
+    })
+    inv_data["Total Value"] = inv_data["Units on Hand"] * inv_data["Unit Cost (ZAR)"]
+    st.dataframe(inv_data, use_container_width=True, hide_index=True)  
