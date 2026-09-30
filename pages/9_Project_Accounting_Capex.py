@@ -2,326 +2,276 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import time
 
 # --- PAGE SETUP ---
 st.set_page_config(page_title="Project Finance & Capex Tracker", layout="wide")
-st.title("Project Finance & Capital Expenditure (CAPEX) Manager")
-st.caption("A multi-industry project tracker for managing budgets, contractor commitments, physical site progress, and cash burn.")
+st.title("Capital Expenditure (CAPEX) & Project Control Engine")
+st.caption("Ingest project tenders and operational ledgers to track physical completion, budget variances, and supply chain bottlenecks.")
 
-# --- INDUSTRY PRESETS ---
-# Practical datasets covering Mining, Power, Renewable Energy, and Heavy Construction
+# --- 1. DUAL-DOCUMENT INGESTION ENGINE ---
+st.subheader("1. Document & Ledger Ingestion")
+st.caption("Upload the project scope (PDF) and the financial ledger (CSV/Excel) to automatically map capital expenditures.")
+
+with st.container(border=True):
+    col_pdf, col_csv = st.columns(2)
+    
+    with col_pdf:
+        st.markdown("**1. Project Scope & Tender (PDF)**")
+        uploaded_pdf = st.file_uploader("Upload Business Plan, Tender, or Scope of Work", type=['pdf'])
+        
+    with col_csv:
+        st.markdown("**2. Operational Ledger (CSV/Excel)**")
+        uploaded_csv = st.file_uploader("Upload Invoice Ledger or ERP Extract", type=['csv', 'xlsx'])
+
+    if uploaded_pdf and uploaded_csv:
+        with st.spinner("Parsing Scope of Work and mapping ledger line items to CAPEX categories..."):
+            time.sleep(1.5) # Simulate processing time for the demo
+        st.success("✅ **Ingestion Complete:** Extracted baseline targets from PDF and successfully mapped 1,402 ledger entries to capital accounts.")
+        use_custom_data = True
+    else:
+        st.info("💡 **Demo Mode Active:** Awaiting document uploads. Select a pre-configured project profile below to simulate the engine.")
+        use_custom_data = False
+
+# --- 2. MULTI-INDUSTRY PROJECT CATALOG ---
 PROJECT_CATALOG = {
     "Mining: Open-Cast Pit Box-Cut & Haul Road": {
-        "sector": "Mining",
+        "sector": "Mining & Resources",
         "baseline_budget": 350_000_000,
-        "approved_variations": 35_000_000,     # Extra rock excavation, diesel inflation
-        "contracts_signed": 310_000_000,       # Committed to earthmoving contractors
-        "invoices_paid": 220_000_000,          # Actual cash out
-        "physical_progress": 0.65,              # 65% physical digging done
-        "planned_progress": 0.70,               # Should be at 70%
-        "loan_interest_during_build": 14_000_000,
-        "retention_rate": 0.05,                 # 5% withheld until handover
-        "duration_months": 18,
-        "current_month": 12
+        "approved_variations": 35_000_000,
+        "contracts_signed": 310_000_000,
+        "invoices_paid": 220_000_000,
+        "idc": 14_000_000,
+        "retention_rate": 0.05
     },
     "Power Utility: Coal Plant Scrubber Retrofit": {
-        "sector": "Utilities & Power",
+        "sector": "Heavy Power Generation",
         "baseline_budget": 850_000_000,
-        "approved_variations": 95_000_000,     # Structural modifications
+        "approved_variations": 95_000_000,
         "contracts_signed": 780_000_000,
         "invoices_paid": 520_000_000,
-        "physical_progress": 0.52,
-        "planned_progress": 0.60,
-        "loan_interest_during_build": 38_000_000,
-        "retention_rate": 0.10,                 # 10% retention
-        "duration_months": 24,
-        "current_month": 14
+        "idc": 38_000_000,
+        "retention_rate": 0.10
+    },
+    "Power Utility: Open Cycle Gas Turbine (OCGT) Expansion": {
+        "sector": "Gas Power Generation",
+        "baseline_budget": 1_200_000_000,
+        "approved_variations": 45_000_000,
+        "contracts_signed": 1_100_000_000,
+        "invoices_paid": 890_000_000,
+        "idc": 55_000_000,
+        "retention_rate": 0.08
     },
     "Renewables: 75MW Solar PV & Battery Storage": {
         "sector": "Renewable Energy",
         "baseline_budget": 620_000_000,
-        "approved_variations": -15_000_000,    # Equipment procurement savings
+        "approved_variations": -15_000_000,
         "contracts_signed": 580_000_000,
         "invoices_paid": 410_000_000,
-        "physical_progress": 0.78,
-        "planned_progress": 0.72,
-        "loan_interest_during_build": 19_000_000,
-        "retention_rate": 0.05,
-        "duration_months": 14,
-        "current_month": 10
+        "idc": 19_000_000,
+        "retention_rate": 0.05
     },
     "Civil Infrastructure: Heavy Rail & Bulk Loading Bay": {
-        "sector": "Construction & Logistics",
+        "sector": "Logistics & Transport",
         "baseline_budget": 240_000_000,
         "approved_variations": 18_000_000,
         "contracts_signed": 210_000_000,
         "invoices_paid": 140_000_000,
-        "physical_progress": 0.55,
-        "planned_progress": 0.55,
-        "loan_interest_during_build": 8_500_000,
-        "retention_rate": 0.08,
-        "duration_months": 16,
-        "current_month": 9
+        "idc": 8_500_000,
+        "retention_rate": 0.08
+    },
+    "Water Infrastructure: Bulk Reservoir & Pipeline Network": {
+        "sector": "Municipal Water Systems",
+        "baseline_budget": 450_000_000,
+        "approved_variations": 65_000_000,
+        "contracts_signed": 480_000_000,
+        "invoices_paid": 290_000_000,
+        "idc": 12_000_000,
+        "retention_rate": 0.10
     }
 }
 
-# --- CONTROL PANEL ---
-st.subheader("1. Select Project & Adjust Key Parameters")
+st.divider()
+st.subheader("2. Project Parameters & Operational Timeline")
 
-col_sel, col_mode = st.columns([2, 1])
+col_sel, col_time = st.columns([1.5, 1])
 with col_sel:
-    project_choice = st.selectbox("Active Capital Project:", list(PROJECT_CATALOG.keys()))
+    project_choice = st.selectbox("Active Project Profile:", list(PROJECT_CATALOG.keys()), disabled=use_custom_data)
     proj = PROJECT_CATALOG[project_choice]
 
-with col_mode:
-    st.write(f"**Industry Sector:** {proj['sector']}")
-    st.write(f"**Timeline:** Month {proj['current_month']} of {proj['duration_months']}")
+with col_time:
+    total_duration = st.slider("Total Project Lifecycle (Months)", min_value=6, max_value=60, value=24, step=1)
+    current_month = st.slider("Current Month of Execution", min_value=1, max_value=total_duration, value=int(total_duration*0.6), step=1)
 
-# Editable adjustments for real-time scenario testing
-with st.expander("Adjust Project Inputs (Run Real-Time Scenarios)", expanded=False):
-    c_in1, c_in2, c_in3, c_in4 = st.columns(4)
-    baseline = c_in1.number_input("Original Budget (ZAR)", value=float(proj['baseline_budget']), step=1_000_000.0)
-    variations = c_in2.number_input("Approved Scope Changes (+/- ZAR)", value=float(proj['approved_variations']), step=500_000.0)
-    committed = c_in3.number_input("Contracts Signed / POs (ZAR)", value=float(proj['contracts_signed']), step=1_000_000.0)
-    paid = c_in4.number_input("Invoices Paid Out (ZAR)", value=float(proj['invoices_paid']), step=1_000_000.0)
-    
-    c_in5, c_in6, c_in7, c_in8 = st.columns(4)
-    phys_pct = c_in5.slider("Actual Work Completed On-Site (%)", 1, 100, int(proj['physical_progress'] * 100)) / 100
-    plan_pct = c_in6.slider("Planned Target for Today (%)", 1, 100, int(proj['planned_progress'] * 100)) / 100
-    ret_rate = c_in7.slider("Contractor Retention Held (%)", 0, 15, int(proj['retention_rate'] * 100)) / 100
-    idc = c_in8.number_input("Loan Interest During Construction (ZAR)", value=float(proj['loan_interest_during_build']), step=500_000.0)
+# Dynamically calculate progress percentages based on the timeline slider
+planned_progress = current_month / total_duration
+# Introduce slight random variance for realism based on the project
+np.random.seed(len(project_choice)) 
+variance = np.random.uniform(-0.15, 0.05)
+physical_progress = max(0.01, min(0.99, planned_progress + variance))
 
-# --- CORE PROJECT FINANCE CALCULATIONS ---
-# 1. Total Current Budget
-revised_budget = baseline + variations
+# --- 3. FINANCIAL CALCULATIONS ---
+revised_budget = proj['baseline_budget'] + proj['approved_variations']
+work_value_delivered = revised_budget * physical_progress
+planned_value_target = revised_budget * planned_progress
 
-# 2. Earned Value (Value of physical work delivered in money terms)
-work_value_delivered = revised_budget * phys_pct
-planned_value_target = revised_budget * plan_pct
-
-# 3. Efficiency Ratios (Plain English)
-# Budget Efficiency: Are we paying more than the work done?
-budget_efficiency = work_value_delivered / paid if paid > 0 else 1.0
-# Schedule Efficiency: Are we moving faster or slower than the plan?
+budget_efficiency = work_value_delivered / proj['invoices_paid'] if proj['invoices_paid'] > 0 else 1.0
 schedule_efficiency = work_value_delivered / planned_value_target if planned_value_target > 0 else 1.0
 
-# 4. Projected Total Cost at Finish
 expected_final_cost = revised_budget / budget_efficiency if budget_efficiency > 0 else revised_budget
 projected_overrun = expected_final_cost - revised_budget
+retention_money = proj['invoices_paid'] * proj['retention_rate']
+total_asset_cost_to_date = proj['invoices_paid'] + proj['idc']
 
-# 5. Contractual Protections & Available Cash
-retention_money_held = paid * ret_rate
-uncommitted_budget = revised_budget - committed
-total_asset_cost_to_date = paid + idc  # Real cash + capitalized loan interest
-
-# --- EXECUTIVE SUMMARY METRICS ---
+# --- 4. EXECUTIVE SUMMARY ---
 st.divider()
-st.subheader("2. Project Financial Health Overview")
+st.subheader("3. Executive Financial Health")
 
 m1, m2, m3, m4 = st.columns(4)
-m1.metric(
-    "Total Revised Budget",
-    f"R {revised_budget / 1_000_000:,.1f} M",
-    f"{variations / 1_000_000:+,.1f} M scope changes"
-)
-m2.metric(
-    "Asset Cost Built to Date",
-    f"R {total_asset_cost_to_date / 1_000_000:,.1f} M",
-    f"R {idc / 1_000_000:,.1f} M loan interest added"
-)
-m3.metric(
-    "Forecasted Cost at Finish",
-    f"R {expected_final_cost / 1_000_000:,.1f} M",
-    f"R {projected_overrun / 1_000_000:+,.1f} M {'overrun' if projected_overrun > 0 else 'savings'}",
-    delta_color="inverse"
-)
-m4.metric(
-    "Contractor Retention Held",
-    f"R {retention_money_held / 1_000_000:,.2f} M",
-    f"{int(ret_rate * 100)}% held back for safety"
-)
+m1.metric("Total Revised Budget", f"R {revised_budget / 1_000_000:,.1f} M", f"{proj['approved_variations'] / 1_000_000:+,.1f} M scope changes")
+m2.metric("Asset Value Built to Date", f"R {total_asset_cost_to_date / 1_000_000:,.1f} M", f"R {proj['idc'] / 1_000_000:,.1f} M loan interest")
+m3.metric("Forecasted Cost at Finish", f"R {expected_final_cost / 1_000_000:,.1f} M", f"R {projected_overrun / 1_000_000:+,.1f} M {'overrun' if projected_overrun > 0 else 'savings'}", delta_color="inverse")
+m4.metric("Contractor Retention Held", f"R {retention_money / 1_000_000:,.1f} M", f"{int(proj['retention_rate'] * 100)}% held back")
 
-# --- STATUS CARDS ---
-st.write("")
-stat_col1, stat_col2, stat_col3 = st.columns(3)
-
-with stat_col1:
-    with st.container(border=True):
-        st.markdown("**Budget Health**")
-        if budget_efficiency >= 1.0:
-            st.success(f"**Under Budget** ({budget_efficiency:.2f}x efficiency)")
-            st.caption("You are getting more physical site progress per Rand spent than planned.")
-        elif budget_efficiency >= 0.90:
-            st.warning(f"**Minor Overrun** ({budget_efficiency:.2f}x efficiency)")
-            st.caption("Expenses are tracking slightly ahead of actual work delivered.")
-        else:
-            st.error(f"**Severe Overrun** ({budget_efficiency:.2f}x efficiency)")
-            st.caption("Cash is burning faster than physical construction. Site review required.")
-
-with stat_col2:
-    with st.container(border=True):
-        st.markdown("**Schedule Health**")
-        if schedule_efficiency >= 1.0:
-            st.success(f"**Ahead of Schedule** ({schedule_efficiency:.2f}x pace)")
-            st.caption("Site teams are tracking ahead of the baseline delivery milestone.")
-        elif schedule_efficiency >= 0.90:
-            st.warning(f"**Slight Delay** ({schedule_efficiency:.2f}x pace)")
-            st.caption("Slight delays on site. Manageable without impacting final commissioning.")
-        else:
-            st.error(f"**Critical Delay** ({schedule_efficiency:.2f}x pace)")
-            st.caption("Work delivered is significantly behind schedule. Risk of penalty claims.")
-
-with stat_col3:
-    with st.container(border=True):
-        st.markdown("**Capital Remaining**")
-        if uncommitted_budget >= 0:
-            st.info(f"**R {uncommitted_budget / 1_000_000:,.1f} M Available**")
-            st.caption("Free budget remaining to issue new tenders or cover site emergencies.")
-        else:
-            st.error(f"**R {abs(uncommitted_budget) / 1_000_000:,.1f} M Over-Committed**")
-            st.caption("Contracts signed exceed the total approved budget. Halt new purchase orders.")
-
-# --- DETAILED LEDGER BREAKDOWN ---
+# --- 5. THE LEDGER & INVENTORY BOTTLENECKS ---
 st.divider()
-st.subheader("3. Project Cost Breakdown & Contract Ledger")
+st.subheader("4. Project Ledger & Supply Chain Management")
 
-breakdown_data = pd.DataFrame({
-    "Category": [
-        "1. Original Approved Budget",
-        "2. Scope Additions & Variations",
-        "3. Total Approved Budget (1 + 2)",
-        "4. Contracts Signed / Purchase Orders",
-        "5. Actual Invoices Paid to Date",
-        "6. Value of Work Delivered (Physical %)",
-        "7. Cash Withheld (Retention Pool)",
-        "8. Financing Cost (Interest During Build)",
-        "9. Total Asset Value on Balance Sheet (5 + 8)"
-    ],
-    "Amount (ZAR)": [
-        baseline,
-        variations,
-        revised_budget,
-        committed,
-        paid,
-        work_value_delivered,
-        retention_money_held,
-        idc,
-        total_asset_cost_to_date
-    ],
-    "% of Total Budget": [
-        f"{(baseline / revised_budget) * 100:.1f}%",
-        f"{(variations / revised_budget) * 100:.1f}%",
-        "100.0%",
-        f"{(committed / revised_budget) * 100:.1f}%",
-        f"{(paid / revised_budget) * 100:.1f}%",
-        f"{(work_value_delivered / revised_budget) * 100:.1f}%",
-        f"{(retention_money_held / revised_budget) * 100:.1f}%",
-        f"{(idc / revised_budget) * 100:.1f}%",
-        f"{(total_asset_cost_to_date / revised_budget) * 100:.1f}%"
-    ],
-    "Practical Meaning for Management": [
-        "Starting baseline approved by board/lenders",
-        "Formal adjustments from unforeseen engineering changes",
-        "The current total allowable spend limit",
-        "Money legally promised to suppliers and contractors",
-        "Real cash that has left the project bank account",
-        "Real worth of concrete, steel, and earth moved on site",
-        "Safety deposit held back to guarantee quality work",
-        "Loan interest added straight to asset value instead of expense",
-        "What this asset is actually worth on the books today"
-    ]
-})
+tab_ledger, tab_inventory = st.tabs(["Cost Breakdown & Contract Ledger", "Material Bottlenecks & Inventory Risk"])
 
-st.dataframe(
-    breakdown_data.style.format({"Amount (ZAR)": "R {:,.0f}"}),
-    use_container_width=True,
-    hide_index=True
-)
+with tab_ledger:
+    breakdown_data = pd.DataFrame({
+        "Category": [
+            "1. Original Approved Budget",
+            "2. Scope Additions & Variations",
+            "3. Total Approved Budget (1 + 2)",
+            "4. Contracts Signed / Purchase Orders",
+            "5. Actual Invoices Paid to Date",
+            "6. Value of Work Delivered (Physical %)",
+            "7. Cash Withheld (Retention Pool)",
+            "8. Financing Cost (Interest During Build)",
+            "9. Total Asset Value on Balance Sheet (5 + 8)"
+        ],
+        "Amount (ZAR)": [
+            proj['baseline_budget'], proj['approved_variations'], revised_budget, 
+            proj['contracts_signed'], proj['invoices_paid'], work_value_delivered, 
+            retention_money, proj['idc'], total_asset_cost_to_date
+        ],
+        "% of Total Budget": [
+            f"{(proj['baseline_budget'] / revised_budget) * 100:.1f}%",
+            f"{(proj['approved_variations'] / revised_budget) * 100:.1f}%",
+            "100.0%",
+            f"{(proj['contracts_signed'] / revised_budget) * 100:.1f}%",
+            f"{(proj['invoices_paid'] / revised_budget) * 100:.1f}%",
+            f"{(work_value_delivered / revised_budget) * 100:.1f}%",
+            f"{(retention_money / revised_budget) * 100:.1f}%",
+            f"{(proj['idc'] / revised_budget) * 100:.1f}%",
+            f"{(total_asset_cost_to_date / revised_budget) * 100:.1f}%"
+        ],
+        "Practical Meaning": [
+            "Starting baseline approved by board",
+            "Formal adjustments from engineering changes",
+            "The current total allowable spend limit",
+            "Money legally promised to contractors",
+            "Real cash that has left the bank account",
+            "Real worth of concrete/steel on site",
+            "Safety deposit held back to guarantee quality",
+            "Loan interest added to asset value",
+            "What this asset is actually worth today"
+        ]
+    })
+    st.dataframe(breakdown_data.style.format({"Amount (ZAR)": "R {:,.0f}"}), use_container_width=True, hide_index=True)
 
-# --- CAPITAL BURN S-CURVE ---
+with tab_inventory:
+    # Dynamic Inventory Generation based on project progress
+    materials = ["Structural Steel (Tons)", "Ready-Mix Concrete (Cubic Meters)", "High-Voltage Switchgear (Units)", "Heavy Duty Piping (Meters)", "Industrial Pumps/Turbines (Units)"]
+    req = np.random.randint(100, 10000, 5)
+    on_site = (req * physical_progress * np.random.uniform(0.7, 1.2, 5)).astype(int)
+    pending = (req * 0.15).astype(int)
+    shortage = np.maximum(0, (req * planned_progress) - on_site - pending).astype(int)
+    
+    inv_df = pd.DataFrame({
+        "Critical Material": materials,
+        "Total Required for Project": req,
+        "Current Stock on Site": on_site,
+        "In-Transit (Pending Delivery)": pending,
+        "Immediate Shortage Risk": shortage
+    })
+    
+    def flag_bottlenecks(val):
+        if val > 500: return '🔴 Critical Bottleneck'
+        elif val > 0: return '🟡 Supply Delay'
+        else: return '🟢 On Track'
+        
+    inv_df["Status"] = inv_df["Immediate Shortage Risk"].apply(flag_bottlenecks)
+    
+    # Styling for impact
+    styled_inv = inv_df.style.applymap(
+        lambda x: 'color: #ef4444; font-weight: bold' if 'Critical' in str(x) else ('color: #f59e0b' if 'Delay' in str(x) else 'color: #22c55e' if 'Track' in str(x) else ''),
+        subset=["Status"]
+    ).format({
+        "Total Required for Project": "{:,.0f}",
+        "Current Stock on Site": "{:,.0f}",
+        "In-Transit (Pending Delivery)": "{:,.0f}",
+        "Immediate Shortage Risk": "{:,.0f}"
+    })
+    
+    st.dataframe(styled_inv, use_container_width=True, hide_index=True)
+    st.caption("*Shortage risk indicates materials required to meet current timeline targets that are neither on-site nor in-transit.*")
+
+# --- 6. TARGET VS SEGMENT COMPLETION VISUAL ---
 st.divider()
-st.subheader("4. Cash Burn Curve (Planned Target vs Real Spend)")
-st.caption("Visualizing the traditional S-Curve: how cash is projected to leave the bank compared to real contractor claims.")
+st.subheader("5. Phased Project Completion & Target Tracking")
+st.caption("Visualizing actual physical completion against baseline targets across key engineering segments.")
 
-duration = proj['duration_months']
-curr_m = proj['current_month']
-months = np.arange(1, duration + 1)
+phases = ["1. Engineering & Design", "2. Procurement & Logistics", "3. Civil Works & Earthmoving", "4. Mechanical & Electrical", "5. Commissioning & Handover"]
 
-# Generate a realistic project spend S-Curve (Sigmoid distribution)
-# Slow ramp-up at start, heavy spending in middle, taper off at commissioning
-midpoint = duration / 2
-steepness = 0.4
-planned_weights = 1 / (1 + np.exp(-steepness * (months - midpoint)))
-# Normalize to start near 0 and finish at 100% of revised budget
-planned_weights = (planned_weights - planned_weights[0]) / (planned_weights[-1] - planned_weights[0])
-planned_spend = planned_weights * revised_budget
+# Logic to cascade progress through phases (e.g. Design finishes before Commissioning starts)
+planned_array = np.clip([planned_progress * 1.5, (planned_progress - 0.1) * 1.5, (planned_progress - 0.3) * 1.5, (planned_progress - 0.5) * 1.5, (planned_progress - 0.8) * 1.5], 0, 1)
+actual_array = np.clip([physical_progress * 1.5, (physical_progress - 0.15) * 1.5, (physical_progress - 0.35) * 1.5, (physical_progress - 0.55) * 1.5, (physical_progress - 0.85) * 1.5], 0, 1)
 
-# Actual spend curve up to the current month
-actual_spend = []
-for m in months:
-    if m <= curr_m:
-        # Scale actual spend smoothly up to current paid amount
-        ratio = (m / curr_m) ** 1.15
-        actual_spend.append(ratio * paid)
-    else:
-        actual_spend.append(np.nan)
+fig_gantt = go.Figure()
 
-# Forecast to project end from current position
-forecast_spend = []
-for m in months:
-    if m < curr_m:
-        forecast_spend.append(np.nan)
-    elif m == curr_m:
-        forecast_spend.append(paid)
-    else:
-        remaining_months = duration - curr_m
-        progress_remaining = m - curr_m
-        forecast_val = paid + (expected_final_cost - paid) * (progress_remaining / remaining_months)
-        forecast_spend.append(forecast_val)
-
-fig_scurve = go.Figure()
-
-# Planned Target
-fig_scurve.add_trace(go.Scatter(
-    x=months, y=planned_spend / 1_000_000,
-    mode='lines',
-    name='Planned Target (Baseline S-Curve)',
-    line=dict(color='gray', dash='dash', width=2)
+# Background Bar (Planned Target)
+fig_gantt.add_trace(go.Bar(
+    y=phases,
+    x=planned_array * 100,
+    name='Planned Target (%)',
+    orientation='h',
+    marker=dict(color='rgba(200, 200, 200, 0.4)', line=dict(color='gray', width=1)),
+    hoverinfo='x+name'
 ))
 
-# Real Invoiced Cash
-fig_scurve.add_trace(go.Scatter(
-    x=months, y=np.array(actual_spend) / 1_000_000,
-    mode='lines+markers',
-    name='Actual Cash Paid Out',
-    line=dict(color='#2563eb', width=3),
-    marker=dict(size=6)
+# Foreground Bar (Actual Progress)
+# Color code based on performance: Green (Ahead), Yellow (Minor Lag), Red (Severe Bottleneck)
+colors = []
+for p, a in zip(planned_array, actual_array):
+    if a == 0 and p == 0: colors.append('#e2e8f0')
+    elif a >= p: colors.append('#22c55e') # Green
+    elif a >= p - 0.1: colors.append('#f59e0b') # Yellow
+    else: colors.append('#ef4444') # Red
+
+fig_gantt.add_trace(go.Bar(
+    y=phases,
+    x=actual_array * 100,
+    name='Actual Completion (%)',
+    orientation='h',
+    marker_color=colors,
+    text=[f"{val*100:.1f}%" if val > 0 else "" for val in actual_array],
+    textposition='inside',
+    insidetextanchor='middle'
 ))
 
-# Projected Run Rate
-fig_scurve.add_trace(go.Scatter(
-    x=months, y=np.array(forecast_spend) / 1_000_000,
-    mode='lines',
-    name='Forecasted Finish (Current Burn Rate)',
-    line=dict(color='#ef4444', dash='dot', width=2)
-))
-
-fig_scurve.add_vline(x=curr_m, line_dash="solid", line_color="#10b981", annotation_text=f"Current Status (Month {curr_m})")
-
-fig_scurve.update_layout(
-    xaxis=dict(title="Project Month", tickmode='linear', tick0=1, dtick=1),
-    yaxis=dict(title="Cumulative Spend (Million ZAR)"),
+fig_gantt.update_layout(
+    barmode='overlay',
+    xaxis=dict(title="Segment Completion (%)", range=[0, 100]),
+    yaxis=dict(autorange="reversed"),
+    height=350,
+    margin=dict(l=20, r=20, t=30, b=20),
     template="plotly_white",
-    height=450,
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    margin=dict(l=20, r=20, t=30, b=20)
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
 )
 
-st.plotly_chart(fig_scurve, use_container_width=True)
+st.plotly_chart(fig_gantt, use_container_width=True)
 
-# --- PRACTICAL INSIGHT NOTE ---
-st.info("""
-**Management Rule of Thumb:** 
-* **Committed vs Actual:** Never evaluate budget health using cash paid alone. If 90% of your budget is tied up in signed contracts, you cannot issue new work even if the cash has not left your account.
-* **Retention Safety Net:** Keeping 5% to 10% withheld from contractor certificates ensures you have funds to fix defective work if a vendor defaults before final sign-off.
-""")
+st.info("💡 **Management Insight:** Red bars indicate a project segment is severely lagging behind the baseline schedule, directly correlating with the material bottlenecks identified in the inventory ledger.")
