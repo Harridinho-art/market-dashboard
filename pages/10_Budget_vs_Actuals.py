@@ -20,11 +20,27 @@ with st.container(border=True):
     
     with col_period:
         st.markdown("**Reporting Period**")
-        period = st.selectbox("Select Period:", ["September 2026 (YTD)", "August 2026 (YTD)", "Q3 2026"])
+        period_options = [
+            "September 2026 (YTD)", "August 2026 (YTD)", 
+            "October 2026", "November 2026", "December 2026",
+            "Q1 2026", "Q2 2026", "Q3 2026", "Q4 2026", 
+            "FY 2025 (Full Year)"
+        ]
+        period = st.selectbox("Select Period:", period_options)
         
     with col_div:
         st.markdown("**Business Division**")
-        division = st.selectbox("Select Division:", ["Power Generation (Operations)", "Corporate Head Office (G&A)", "Sales & Commercial"])
+        division_options = [
+            "Power Generation (Operations)", 
+            "Corporate Head Office (G&A)", 
+            "Sales & Commercial",
+            "FinTech & Digital Payments",
+            "Logistics & Supply Chain",
+            "Retail & Consumer Banking",
+            "Property & Real Estate Management",
+            "Heavy Mining & Extraction"
+        ]
+        division = st.selectbox("Select Division:", division_options)
 
 if uploaded_tb:
     with st.spinner("Reconciling uploaded trial balance against baseline budget..."):
@@ -34,7 +50,6 @@ else:
     st.info(f"💡 **Demo Mode Active:** Loading standard OPEX profile for **{division}**.")
 
 # --- 2. DYNAMIC OPEX PROFILES ---
-# Costs are represented as negative numbers to accurately calculate net profit/burn
 if division == "Power Generation (Operations)":
     data = {
         "Line Item": ["Electricity Sales (Income)", "Fuel & Primary Energy", "Plant Maintenance", "Shift Labor & Overtime", "Logistics & Freight"],
@@ -47,17 +62,46 @@ elif division == "Corporate Head Office (G&A)":
         "Budget (ZAR)": [2000000, -3500000, -1200000, -800000, -400000],
         "Actual (ZAR)": [1900000, -3550000, -1450000, -600000, -420000]
     }
-else: # Sales & Commercial
+elif division == "Sales & Commercial":
     data = {
         "Line Item": ["B2B Contract Revenue", "Sales Team Commissions", "Marketing & Advertising", "Travel & Entertainment", "Client Onboarding Costs"],
         "Budget (ZAR)": [8500000, -1200000, -900000, -300000, -150000],
         "Actual (ZAR)": [9100000, -1350000, -850000, -450000, -120000]
     }
+elif division == "FinTech & Digital Payments":
+    data = {
+        "Line Item": ["Transaction Fee Revenue", "Cloud & API Infrastructure", "Payment Gateway Fees", "Fraud & Compliance Ops", "Engineering Salaries"],
+        "Budget (ZAR)": [22000000, -4500000, -3200000, -1500000, -5500000],
+        "Actual (ZAR)": [24500000, -5100000, -3800000, -1450000, -5600000]
+    }
+elif division == "Logistics & Supply Chain":
+    data = {
+        "Line Item": ["Freight Revenue", "Fuel & Tolls", "Fleet Maintenance", "Warehouse Leases", "Driver & Depot Wages"],
+        "Budget (ZAR)": [18000000, -6500000, -2000000, -1800000, -4500000],
+        "Actual (ZAR)": [17200000, -7100000, -2300000, -1800000, -4600000]
+    }
+elif division == "Retail & Consumer Banking":
+    data = {
+        "Line Item": ["Net Interest Income", "Branch Network OPEX", "ATM Servicing & Cash Transits", "Marketing & Acquisition", "Teller & Branch Salaries"],
+        "Budget (ZAR)": [35000000, -4500000, -2200000, -3000000, -9000000],
+        "Actual (ZAR)": [34100000, -4400000, -2350000, -2800000, -9200000]
+    }
+elif division == "Property & Real Estate Management":
+    data = {
+        "Line Item": ["Commercial Rental Income", "Property Taxes & Levies", "Facilities Maintenance", "Security & Cleaning Contracts", "Insurance Premiums"],
+        "Budget (ZAR)": [12000000, -2500000, -1500000, -1200000, -800000],
+        "Actual (ZAR)": [11800000, -2500000, -1850000, -1250000, -850000]
+    }
+elif division == "Heavy Mining & Extraction":
+    data = {
+        "Line Item": ["Mineral Sales (Income)", "Yellow Metal Maintenance", "Explosives & Blasting OPEX", "Shaft Labor & Overtime", "Environmental Compliance"],
+        "Budget (ZAR)": [45000000, -12000000, -5500000, -14000000, -2000000],
+        "Actual (ZAR)": [42500000, -13200000, -5200000, -14800000, -2100000]
+    }
 
 df = pd.DataFrame(data)
 
 # Calculate Variances
-# Formula: Actual - Budget. (e.g., Actual Cost of -8.9M minus Budget Cost of -8.0M = -0.9M Adverse)
 df["Performance Gap"] = df["Actual (ZAR)"] - df["Budget (ZAR)"]
 df["% Variance"] = (df["Performance Gap"] / abs(df["Budget (ZAR)"])) * 100
 
@@ -156,8 +200,33 @@ with st.container(border=True):
         * **IT & Infrastructure Overrun:** Software & IT Cloud Leases exceeded budget by R 250,000. Investigate unapproved SaaS subscriptions or unexpected data storage overages.
         * **Professional Services Savings:** Legal & Consulting Fees came in R 200,000 under budget, indicating strong internal capacity and limited reliance on outside contractors this period.
         """)
-    else:
+    elif division == "Sales & Commercial":
         st.markdown("""
         * **Revenue Outperformance:** B2B Contract Revenue beat the budget by R 600,000, signaling strong market capture.
         * **Correlated Overrun:** Sales Commissions and Travel proportionally exceeded the budget. This is an expected and acceptable adverse variance, as it is directly tied to the outperformance in revenue generation.
+        """)
+    elif division == "FinTech & Digital Payments":
+        st.markdown("""
+        * **Transaction Growth:** Fee revenue beat targets by R 2.5M, indicating higher-than-expected digital payment volume.
+        * **Infrastructure Scalability Cost:** Cloud & API Infrastructure overran by R 600,000. This is an adverse variance directly correlated to the spike in processing volume.
+        """)
+    elif division == "Logistics & Supply Chain":
+        st.markdown("""
+        * **Fuel Inflation:** Fuel & Tolls exceeded budget by R 600,000. Immediate hedging strategies or route optimization audits are required to contain OPEX burn.
+        * **Maintenance Spikes:** Fleet maintenance overran by R 300,000, suggesting an aging vehicle fleet that may require Capex investment to offset rising OPEX.
+        """)
+    elif division == "Retail & Consumer Banking":
+        st.markdown("""
+        * **Margin Compression:** Net Interest Income missed budget by R 900,000. Investigate yield curve shifts or lower-than-expected retail lending origination.
+        * **Cash Management Overrun:** ATM Servicing & Cash Transits exceeded budget by R 150,000.
+        """)
+    elif division == "Property & Real Estate Management":
+        st.markdown("""
+        * **Occupancy Shortfall:** Commercial Rental Income underperformed by R 200,000. Review tenant vacancy rates and renegotiation schedules.
+        * **Facilities Overrun:** Maintenance exceeded budget by R 350,000 due to unplanned emergency repairs.
+        """)
+    elif division == "Heavy Mining & Extraction":
+        st.markdown("""
+        * **Production Shortfall:** Mineral Sales missed budget by R 2.5M. Investigate whether this was driven by global commodity pricing or lower physical extraction volume at the shaft.
+        * **Equipment Downtime:** Yellow Metal Maintenance overran by R 1.2M. Requires immediate review of equipment lifecycle management.
         """)
