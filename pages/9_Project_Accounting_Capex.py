@@ -103,37 +103,49 @@ with col_time:
     total_duration = st.slider("Total Project Lifecycle (Months)", min_value=6, max_value=60, value=24, step=1)
     current_month = st.slider("Current Month of Execution", min_value=1, max_value=total_duration, value=int(total_duration*0.6), step=1)
 
+# --- 3. SCENARIO TESTING (RESTORED FINANCIAL OVERRIDES) ---
+with st.expander("Adjust Project Financial Inputs (Scenario Testing)", expanded=False):
+    st.caption("Override the baseline financial figures to stress-test capital structures and overruns.")
+    c_in1, c_in2, c_in3, c_in4 = st.columns(4)
+    adj_baseline = c_in1.number_input("Original Budget (ZAR)", value=float(proj['baseline_budget']), step=1_000_000.0)
+    adj_variations = c_in2.number_input("Approved Scope Changes (+/- ZAR)", value=float(proj['approved_variations']), step=500_000.0)
+    adj_committed = c_in3.number_input("Contracts Signed / POs (ZAR)", value=float(proj['contracts_signed']), step=1_000_000.0)
+    adj_paid = c_in4.number_input("Invoices Paid Out (ZAR)", value=float(proj['invoices_paid']), step=1_000_000.0)
+    
+    c_in5, c_in6 = st.columns(2)
+    adj_idc = c_in5.number_input("Loan Interest During Construction (ZAR)", value=float(proj['idc']), step=500_000.0)
+    adj_ret_rate = c_in6.slider("Contractor Retention Held (%)", 0, 15, int(proj['retention_rate'] * 100)) / 100
+
 # Dynamically calculate progress percentages based on the timeline slider
 planned_progress = current_month / total_duration
-# Introduce slight random variance for realism based on the project
 np.random.seed(len(project_choice)) 
 variance = np.random.uniform(-0.15, 0.05)
 physical_progress = max(0.01, min(0.99, planned_progress + variance))
 
-# --- 3. FINANCIAL CALCULATIONS ---
-revised_budget = proj['baseline_budget'] + proj['approved_variations']
+# --- 4. FINANCIAL CALCULATIONS ---
+revised_budget = adj_baseline + adj_variations
 work_value_delivered = revised_budget * physical_progress
 planned_value_target = revised_budget * planned_progress
 
-budget_efficiency = work_value_delivered / proj['invoices_paid'] if proj['invoices_paid'] > 0 else 1.0
+budget_efficiency = work_value_delivered / adj_paid if adj_paid > 0 else 1.0
 schedule_efficiency = work_value_delivered / planned_value_target if planned_value_target > 0 else 1.0
 
 expected_final_cost = revised_budget / budget_efficiency if budget_efficiency > 0 else revised_budget
 projected_overrun = expected_final_cost - revised_budget
-retention_money = proj['invoices_paid'] * proj['retention_rate']
-total_asset_cost_to_date = proj['invoices_paid'] + proj['idc']
+retention_money = adj_paid * adj_ret_rate
+total_asset_cost_to_date = adj_paid + adj_idc
 
-# --- 4. EXECUTIVE SUMMARY ---
+# --- 5. EXECUTIVE SUMMARY ---
 st.divider()
 st.subheader("3. Executive Financial Health")
 
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Total Revised Budget", f"R {revised_budget / 1_000_000:,.1f} M", f"{proj['approved_variations'] / 1_000_000:+,.1f} M scope changes")
-m2.metric("Asset Value Built to Date", f"R {total_asset_cost_to_date / 1_000_000:,.1f} M", f"R {proj['idc'] / 1_000_000:,.1f} M loan interest")
+m1.metric("Total Revised Budget", f"R {revised_budget / 1_000_000:,.1f} M", f"{adj_variations / 1_000_000:+,.1f} M scope changes")
+m2.metric("Asset Value Built to Date", f"R {total_asset_cost_to_date / 1_000_000:,.1f} M", f"R {adj_idc / 1_000_000:,.1f} M loan interest")
 m3.metric("Forecasted Cost at Finish", f"R {expected_final_cost / 1_000_000:,.1f} M", f"R {projected_overrun / 1_000_000:+,.1f} M {'overrun' if projected_overrun > 0 else 'savings'}", delta_color="inverse")
-m4.metric("Contractor Retention Held", f"R {retention_money / 1_000_000:,.1f} M", f"{int(proj['retention_rate'] * 100)}% held back")
+m4.metric("Contractor Retention Held", f"R {retention_money / 1_000_000:,.1f} M", f"{int(adj_ret_rate * 100)}% held back")
 
-# --- 5. THE LEDGER & INVENTORY BOTTLENECKS ---
+# --- 6. THE LEDGER & INVENTORY BOTTLENECKS ---
 st.divider()
 st.subheader("4. Project Ledger & Supply Chain Management")
 
@@ -153,19 +165,19 @@ with tab_ledger:
             "9. Total Asset Value on Balance Sheet (5 + 8)"
         ],
         "Amount (ZAR)": [
-            proj['baseline_budget'], proj['approved_variations'], revised_budget, 
-            proj['contracts_signed'], proj['invoices_paid'], work_value_delivered, 
-            retention_money, proj['idc'], total_asset_cost_to_date
+            adj_baseline, adj_variations, revised_budget, 
+            adj_committed, adj_paid, work_value_delivered, 
+            retention_money, adj_idc, total_asset_cost_to_date
         ],
         "% of Total Budget": [
-            f"{(proj['baseline_budget'] / revised_budget) * 100:.1f}%",
-            f"{(proj['approved_variations'] / revised_budget) * 100:.1f}%",
+            f"{(adj_baseline / revised_budget) * 100:.1f}%",
+            f"{(adj_variations / revised_budget) * 100:.1f}%",
             "100.0%",
-            f"{(proj['contracts_signed'] / revised_budget) * 100:.1f}%",
-            f"{(proj['invoices_paid'] / revised_budget) * 100:.1f}%",
+            f"{(adj_committed / revised_budget) * 100:.1f}%",
+            f"{(adj_paid / revised_budget) * 100:.1f}%",
             f"{(work_value_delivered / revised_budget) * 100:.1f}%",
             f"{(retention_money / revised_budget) * 100:.1f}%",
-            f"{(proj['idc'] / revised_budget) * 100:.1f}%",
+            f"{(adj_idc / revised_budget) * 100:.1f}%",
             f"{(total_asset_cost_to_date / revised_budget) * 100:.1f}%"
         ],
         "Practical Meaning": [
@@ -183,7 +195,6 @@ with tab_ledger:
     st.dataframe(breakdown_data.style.format({"Amount (ZAR)": "R {:,.0f}"}), use_container_width=True, hide_index=True)
 
 with tab_inventory:
-    # Dynamic Inventory Generation based on project progress
     materials = ["Structural Steel (Tons)", "Ready-Mix Concrete (Cubic Meters)", "High-Voltage Switchgear (Units)", "Heavy Duty Piping (Meters)", "Industrial Pumps/Turbines (Units)"]
     req = np.random.randint(100, 10000, 5)
     on_site = (req * physical_progress * np.random.uniform(0.7, 1.2, 5)).astype(int)
@@ -205,8 +216,8 @@ with tab_inventory:
         
     inv_df["Status"] = inv_df["Immediate Shortage Risk"].apply(flag_bottlenecks)
     
-    # Styling for impact
-    styled_inv = inv_df.style.applymap(
+    # FIXED: Replaced deprecated applymap with map for newer Pandas versions
+    styled_inv = inv_df.style.map(
         lambda x: 'color: #ef4444; font-weight: bold' if 'Critical' in str(x) else ('color: #f59e0b' if 'Delay' in str(x) else 'color: #22c55e' if 'Track' in str(x) else ''),
         subset=["Status"]
     ).format({
@@ -219,20 +230,18 @@ with tab_inventory:
     st.dataframe(styled_inv, use_container_width=True, hide_index=True)
     st.caption("*Shortage risk indicates materials required to meet current timeline targets that are neither on-site nor in-transit.*")
 
-# --- 6. TARGET VS SEGMENT COMPLETION VISUAL ---
+# --- 7. TARGET VS SEGMENT COMPLETION VISUAL ---
 st.divider()
 st.subheader("5. Phased Project Completion & Target Tracking")
 st.caption("Visualizing actual physical completion against baseline targets across key engineering segments.")
 
 phases = ["1. Engineering & Design", "2. Procurement & Logistics", "3. Civil Works & Earthmoving", "4. Mechanical & Electrical", "5. Commissioning & Handover"]
 
-# Logic to cascade progress through phases (e.g. Design finishes before Commissioning starts)
 planned_array = np.clip([planned_progress * 1.5, (planned_progress - 0.1) * 1.5, (planned_progress - 0.3) * 1.5, (planned_progress - 0.5) * 1.5, (planned_progress - 0.8) * 1.5], 0, 1)
 actual_array = np.clip([physical_progress * 1.5, (physical_progress - 0.15) * 1.5, (physical_progress - 0.35) * 1.5, (physical_progress - 0.55) * 1.5, (physical_progress - 0.85) * 1.5], 0, 1)
 
 fig_gantt = go.Figure()
 
-# Background Bar (Planned Target)
 fig_gantt.add_trace(go.Bar(
     y=phases,
     x=planned_array * 100,
@@ -242,14 +251,12 @@ fig_gantt.add_trace(go.Bar(
     hoverinfo='x+name'
 ))
 
-# Foreground Bar (Actual Progress)
-# Color code based on performance: Green (Ahead), Yellow (Minor Lag), Red (Severe Bottleneck)
 colors = []
 for p, a in zip(planned_array, actual_array):
     if a == 0 and p == 0: colors.append('#e2e8f0')
-    elif a >= p: colors.append('#22c55e') # Green
-    elif a >= p - 0.1: colors.append('#f59e0b') # Yellow
-    else: colors.append('#ef4444') # Red
+    elif a >= p: colors.append('#22c55e') 
+    elif a >= p - 0.1: colors.append('#f59e0b') 
+    else: colors.append('#ef4444') 
 
 fig_gantt.add_trace(go.Bar(
     y=phases,
