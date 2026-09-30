@@ -93,6 +93,7 @@ PROJECT_CATALOG = {
 
 st.divider()
 st.subheader("2. Project Parameters & Operational Timeline")
+st.caption("Define the total lifespan of the project from start to finish, and pinpoint the current month to track ongoing progress.")
 
 col_sel, col_time = st.columns([1.5, 1])
 with col_sel:
@@ -100,21 +101,21 @@ with col_sel:
     proj = PROJECT_CATALOG[project_choice]
 
 with col_time:
-    total_duration = st.slider("Total Project Lifecycle (Months)", min_value=6, max_value=60, value=24, step=1)
-    current_month = st.slider("Current Month of Execution", min_value=1, max_value=total_duration, value=int(total_duration*0.6), step=1)
+    total_duration = st.slider("Total Project Lifespan (in Months)", min_value=6, max_value=60, value=24, step=1)
+    current_month = st.slider("Current Active Month", min_value=1, max_value=total_duration, value=int(total_duration*0.6), step=1)
 
 # --- 3. SCENARIO TESTING (RESTORED FINANCIAL OVERRIDES) ---
 with st.expander("Adjust Project Financial Inputs (Scenario Testing)", expanded=False):
     st.caption("Override the baseline financial figures to stress-test capital structures and overruns.")
     c_in1, c_in2, c_in3, c_in4 = st.columns(4)
     adj_baseline = c_in1.number_input("Original Budget (ZAR)", value=float(proj['baseline_budget']), step=1_000_000.0)
-    adj_variations = c_in2.number_input("Approved Scope Changes (+/- ZAR)", value=float(proj['approved_variations']), step=500_000.0)
+    adj_variations = c_in2.number_input("Approved Budget Adjustments (+/- ZAR)", value=float(proj['approved_variations']), step=500_000.0)
     adj_committed = c_in3.number_input("Contracts Signed / POs (ZAR)", value=float(proj['contracts_signed']), step=1_000_000.0)
     adj_paid = c_in4.number_input("Invoices Paid Out (ZAR)", value=float(proj['invoices_paid']), step=1_000_000.0)
     
     c_in5, c_in6 = st.columns(2)
     adj_idc = c_in5.number_input("Loan Interest During Construction (ZAR)", value=float(proj['idc']), step=500_000.0)
-    adj_ret_rate = c_in6.slider("Contractor Retention Held (%)", 0, 15, int(proj['retention_rate'] * 100)) / 100
+    adj_ret_rate = c_in6.slider("Safety Deposit Withheld (%)", 0, 15, int(proj['retention_rate'] * 100)) / 100
 
 # Dynamically calculate progress percentages based on the timeline slider
 planned_progress = current_month / total_duration
@@ -137,13 +138,13 @@ total_asset_cost_to_date = adj_paid + adj_idc
 
 # --- 5. EXECUTIVE SUMMARY ---
 st.divider()
-st.subheader("3. Executive Financial Health")
+st.subheader("3. Financial Health Overview")
 
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Total Revised Budget", f"R {revised_budget / 1_000_000:,.1f} M", f"{adj_variations / 1_000_000:+,.1f} M scope changes")
+m1.metric("Total Revised Budget", f"R {revised_budget / 1_000_000:,.1f} M", f"{adj_variations / 1_000_000:+,.1f} M adjustments")
 m2.metric("Asset Value Built to Date", f"R {total_asset_cost_to_date / 1_000_000:,.1f} M", f"R {adj_idc / 1_000_000:,.1f} M loan interest")
 m3.metric("Forecasted Cost at Finish", f"R {expected_final_cost / 1_000_000:,.1f} M", f"R {projected_overrun / 1_000_000:+,.1f} M {'overrun' if projected_overrun > 0 else 'savings'}", delta_color="inverse")
-m4.metric("Contractor Retention Held", f"R {retention_money / 1_000_000:,.1f} M", f"{int(adj_ret_rate * 100)}% held back")
+m4.metric("Safety Deposit Withheld", f"R {retention_money / 1_000_000:,.1f} M", f"{int(adj_ret_rate * 100)}% held back")
 
 # --- 6. THE LEDGER & INVENTORY BOTTLENECKS ---
 st.divider()
@@ -155,12 +156,12 @@ with tab_ledger:
     breakdown_data = pd.DataFrame({
         "Category": [
             "1. Original Approved Budget",
-            "2. Scope Additions & Variations",
+            "2. Approved Budget Adjustments",
             "3. Total Approved Budget (1 + 2)",
             "4. Contracts Signed / Purchase Orders",
             "5. Actual Invoices Paid to Date",
             "6. Value of Work Delivered (Physical %)",
-            "7. Cash Withheld (Retention Pool)",
+            "7. Cash Withheld (Safety Deposit)",
             "8. Financing Cost (Interest During Build)",
             "9. Total Asset Value on Balance Sheet (5 + 8)"
         ],
@@ -182,12 +183,12 @@ with tab_ledger:
         ],
         "Practical Meaning": [
             "Starting baseline approved by board",
-            "Formal adjustments from engineering changes",
+            "Extra funds approved to cover unexpected costs or design changes",
             "The current total allowable spend limit",
             "Money legally promised to contractors",
             "Real cash that has left the bank account",
             "Real worth of concrete/steel on site",
-            "Safety deposit held back to guarantee quality",
+            "Cash withheld from contractors until final work is inspected and approved",
             "Loan interest added to asset value",
             "What this asset is actually worth today"
         ]
@@ -216,7 +217,6 @@ with tab_inventory:
         
     inv_df["Status"] = inv_df["Immediate Shortage Risk"].apply(flag_bottlenecks)
     
-    # FIXED: Replaced deprecated applymap with map for newer Pandas versions
     styled_inv = inv_df.style.map(
         lambda x: 'color: #ef4444; font-weight: bold' if 'Critical' in str(x) else ('color: #f59e0b' if 'Delay' in str(x) else 'color: #22c55e' if 'Track' in str(x) else ''),
         subset=["Status"]
