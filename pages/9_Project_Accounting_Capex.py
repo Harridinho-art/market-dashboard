@@ -107,6 +107,8 @@ with col_time:
 # --- 3. SCENARIO TESTING (RESTORED FINANCIAL OVERRIDES) ---
 with st.expander("Adjust Project Financial Inputs (Scenario Testing)", expanded=False):
     st.caption("Override the baseline financial figures to stress-test capital structures and overruns.")
+    st.info("ℹ️ **Note:** All figures represent **cumulative totals** for the entire project lifecycle up to the current active month, not individual monthly spend.")
+    
     c_in1, c_in2, c_in3, c_in4 = st.columns(4)
     adj_baseline = c_in1.number_input("Original Budget (ZAR)", value=float(proj['baseline_budget']), step=1_000_000.0)
     adj_variations = c_in2.number_input("Approved Budget Adjustments (+/- ZAR)", value=float(proj['approved_variations']), step=500_000.0)
