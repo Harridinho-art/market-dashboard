@@ -24,7 +24,7 @@ with st.container(border=True):
         
     with col_ticker:
         st.markdown("**Option B: Live Market Data**")
-        ticker = st.text_input("Analyze Corporate Ticker:", value="SHP.JO").upper()
+        ticker = st.text_input("Analyze Corporate Ticker:", value="MSFT").upper()
         st.caption("*Leave upload blank to use live ticker.*")
         
     with col_sliders:
