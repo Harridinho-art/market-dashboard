@@ -1,7 +1,10 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
+import hashlib
+from datetime import datetime, timedelta
 
 # --- 1. PAGE SETUP (NO SIDEBAR) ---
 st.set_page_config(page_title="Working Capital Engine", layout="wide", initial_sidebar_state="collapsed")
@@ -86,7 +89,10 @@ def process_working_capital(file, t_symbol):
         return {
             "Name": company_name, "Symbol": sym, 
             "DIO": dio, "DSO": dso, "DPO": dpo, "CCC": ccc,
-            "Daily_COGS": daily_cogs
+            "Daily_COGS": daily_cogs,
+            "Inventory": float(inventory) if pd.notna(inventory) else 0.0,
+            "Receivables": float(receivables) if pd.notna(receivables) else 0.0,
+            "Payables": float(payables) if pd.notna(payables) else 0.0
         }
     except Exception as e:
         return None
@@ -220,44 +226,96 @@ with col_fund2:
     else:
         st.success("**Optimization Achieved**")
         st.markdown(f"Your adjusted policies have shrunk the cash gap by **{abs(ccc_delta):.0f} days**, freeing up **{sym}{abs(funding_delta):,.0f}** in trapped cash. This reduces reliance on expensive short-term debt.")
-     
+        
+# --- 8. WORKING CAPITAL SUB-LEDGER DRILL-DOWN ---
 st.divider()
-st.subheader("Working Capital Sub-Ledger Drill-Down")
-st.caption("Granular view of the underlying ledgers driving the Cash Conversion Cycle.")
+st.subheader("5. Working Capital Sub-Ledger Breakdown")
 
-# Create tabs for the three core working capital components
-tab_ar, tab_ap, tab_inv = st.tabs(["Accounts Receivable (A/R)", "Accounts Payable (A/P)", "Inventory Valuation"])
-
-with tab_ar:
-    st.markdown("**Active A/R Ledger**")
-    # Example sub-ledger data - replace with your actual data source
+if uploaded_file is not None:
+    st.success("Internal ERP Data Loaded. (File uploaded successfully).")
+else:
+    st.info(f"💡 **Public Reporting Notice:** Public companies keep individual customer and supplier invoices confidential. The ledgers below are generated to accurately scale against {data['Name']}'s reported balance sheet.")
+    
+    # Create a consistent, unique random seed based on the active ticker
+    seed = int(hashlib.md5(ticker.encode()).hexdigest(), 16) % (2**32)
+    rng = np.random.default_rng(seed)
+    
+    today = datetime.today()
+    
+    # 1. Generate Dynamic Accounts Receivable (A/R)
+    ar_balance = data["Receivables"] if data["Receivables"] > 0 else 5_000_000
+    ar_size = int(rng.integers(4, 9))
+    
+    ar_weights = rng.random(ar_size)
+    ar_amounts = (ar_weights / ar_weights.sum()) * ar_balance
+    
+    industries = ["Mining & Resources", "Technology & IT", "Logistics & Freight", "Retail & Wholesale", "Manufacturing", "Energy & Utilities", "Healthcare"]
+    
     ar_data = pd.DataFrame({
-        "Customer ID": ["CUST-001", "CUST-002", "CUST-003", "CUST-004"],
-        "Industry": ["Mining", "Logistics", "Retail", "Manufacturing"],
-        "Invoice Date": ["2026-08-15", "2026-09-01", "2026-09-10", "2026-09-25"],
-        "Amount (ZAR)": [450000, 125000, 89000, 320000],
-        "Days Outstanding": [46, 29, 20, 5]
+        "Customer ID": [f"CUST-{ticker[:3]}-{rng.integers(1000, 9999)}" for _ in range(ar_size)],
+        "Industry": rng.choice(industries, ar_size),
+        "Invoice Date": [(today - timedelta(days=int(d))).strftime('%Y-%m-%d') for d in rng.integers(5, 120, ar_size)],
+        "Amount": ar_amounts
     })
-    st.dataframe(ar_data, use_container_width=True, hide_index=True)
-    st.metric("Total Unsettled A/R", f"R {ar_data['Amount (ZAR)'].sum():,.2f}")
-
-with tab_ap:
-    st.markdown("**Active A/P Ledger**")
+    
+    # 2. Generate Dynamic Accounts Payable (A/P)
+    ap_balance = data["Payables"] if data["Payables"] > 0 else 4_000_000
+    ap_size = int(rng.integers(3, 7))
+    
+    ap_weights = rng.random(ap_size)
+    ap_amounts = (ap_weights / ap_weights.sum()) * ap_balance
+    
+    vendor_cats = ["Raw Materials", "Logistics & Shipping", "Cloud Infrastructure", "Consulting & Advisory", "Heavy Machinery", "Legal & Compliance"]
+    
     ap_data = pd.DataFrame({
-        "Vendor ID": ["VEND-99", "VEND-42", "VEND-11"],
-        "Category": ["Heavy Machinery", "Consulting", "Raw Materials"],
-        "Due Date": ["2026-10-05", "2026-10-15", "2026-10-20"],
-        "Amount (ZAR)": [850000, 45000, 620000]
+        "Vendor ID": [f"VEND-{ticker[:3]}-{rng.integers(1000, 9999)}" for _ in range(ap_size)],
+        "Category": rng.choice(vendor_cats, ap_size),
+        "Due Date": [(today + timedelta(days=int(d))).strftime('%Y-%m-%d') for d in rng.integers(-10, 45, ap_size)],
+        "Amount": ap_amounts
     })
-    st.dataframe(ap_data, use_container_width=True, hide_index=True)
 
-with tab_inv:
-    st.markdown("**Inventory Sub-Ledger (FIFO Valuation)**")
+    # 3. Generate Dynamic Inventory
+    inv_balance = data["Inventory"] if data["Inventory"] > 0 else 6_000_000
+    inv_size = int(rng.integers(3, 6))
+    
+    inv_weights = rng.random(inv_size)
+    inv_amounts = (inv_weights / inv_weights.sum()) * inv_balance
+    
+    locations = ["eMalahleni Central Depot", "Richards Bay Terminal", "Johannesburg Logistics Hub", "Durban Port Siding", "Cape Town DC", "Kusile Storage Facility"]
+    
     inv_data = pd.DataFrame({
-        "SKU": ["SKU-A1", "SKU-B2", "SKU-C3"],
-        "Warehouse Location": ["eMalahleni Hub", "Richards Bay", "Centurion"],
-        "Units on Hand": [1200, 450, 8900],
-        "Unit Cost (ZAR)": [125.50, 890.00, 45.20]
+        "SKU": [f"SKU-{ticker}-{rng.integers(1000, 9999)}" for _ in range(inv_size)],
+        "Warehouse Location": rng.choice(locations, inv_size, replace=False),
+        "Total Value": inv_amounts
     })
-    inv_data["Total Value"] = inv_data["Units on Hand"] * inv_data["Unit Cost (ZAR)"]
-    st.dataframe(inv_data, use_container_width=True, hide_index=True)  
+    
+    inv_data["Units on Hand"] = rng.integers(100, 25000, inv_size)
+    inv_data["Unit Cost"] = inv_data["Total Value"] / inv_data["Units on Hand"]
+
+    # 4. Display the tabs
+    tab_ar, tab_ap, tab_inv = st.tabs(["Accounts Receivable (A/R)", "Accounts Payable (A/P)", "Inventory Valuation"])
+
+    with tab_ar:
+        st.markdown(f"**Top Customer Invoices: {data['Name']}**")
+        st.dataframe(
+            ar_data.style.format({"Amount": f"{sym} {{:,.0f}}"}),
+            use_container_width=True, hide_index=True
+        )
+
+    with tab_ap:
+        st.markdown(f"**Outstanding Vendor Bills: {data['Name']}**")
+        st.dataframe(
+            ap_data.style.format({"Amount": f"{sym} {{:,.0f}}"}),
+            use_container_width=True, hide_index=True
+        )
+
+    with tab_inv:
+        st.markdown(f"**Current Inventory Holdings: {data['Name']}**")
+        st.dataframe(
+            inv_data.style.format({
+                "Total Value": f"{sym} {{:,.0f}}",
+                "Unit Cost": f"{sym} {{:,.2f}}",
+                "Units on Hand": "{:,.0f}"
+            }),
+            use_container_width=True, hide_index=True
+        )
