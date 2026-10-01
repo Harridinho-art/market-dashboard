@@ -53,7 +53,7 @@ ebitda_shock_pct = st.sidebar.slider(
 asset_haircut_pct = st.sidebar.slider(
     "Asset Value Write-Down (%)", 
     min_value=0, max_value=50, value=20, step=5,
-    help="Simulates the bank deciding the company's assets (collateral) are suddenly worth less than reported."
+    help="Simulates the bank deciding assets are worth less. A drop here automatically triggers a Loan-to-Value (LTV) interest rate penalty from the bank."
 )
 
 # --- 2. DATA EXTRACTION ENGINE ---
@@ -107,17 +107,20 @@ if not data or data["Total Debt"] == 0:
 sym = data["Symbol"]
 
 # --- 3. REFINANCING MATHEMATICS ---
-# Apply the "Current Average Interest Rate" slider directly to the baseline math to fix the bug
 simulated_base_interest = data["Total Debt"] * (old_rate / 100.0)
 
 # 1. Maturing Debt Volume
 maturing_debt = data["Total Debt"] * (refinance_pct / 100.0)
 untouched_debt = data["Total Debt"] - maturing_debt
 
-# 2. Refinanced Borrowing Rate: Old Base + Central Bank Shock + Lender Penalty
-new_refinanced_rate = (old_rate / 100.0) + (base_rate_shock_bps / 100.0) + (credit_spread_bps / 100.0)
+# 2. Asset Value Penalty (Loan-to-Value / LTV Penalty)
+# For every 1% asset value drop, the bank adds 0.05% to the interest rate.
+ltv_penalty_rate = asset_haircut_pct * 0.05
 
-# 3. Interest Cost Evolution
+# 3. Refinanced Borrowing Rate: Old Base + Central Bank Shock + Lender Penalty + LTV Penalty
+new_refinanced_rate = (old_rate / 100.0) + (base_rate_shock_bps / 100.0) + (credit_spread_bps / 100.0) + (ltv_penalty_rate / 100.0)
+
+# 4. Interest Cost Evolution
 old_maturing_interest = maturing_debt * (old_rate / 100.0)
 new_maturing_interest = maturing_debt * new_refinanced_rate
 refinancing_cost_delta = new_maturing_interest - old_maturing_interest
@@ -125,7 +128,7 @@ refinancing_cost_delta = new_maturing_interest - old_maturing_interest
 # Total New Annual Interest
 stressed_total_interest = simulated_base_interest + refinancing_cost_delta
 
-# 4. Earnings & Coverage Shocks
+# 5. Earnings & Coverage Shocks
 stressed_ebitda = data["EBITDA"] * (1.0 + (ebitda_shock_pct / 100.0))
 stressed_ebit = data["EBIT"] * (1.0 + (ebitda_shock_pct / 100.0))
 stressed_net_income = data["Net Income"] - refinancing_cost_delta
@@ -138,7 +141,7 @@ base_net_debt = data["Total Debt"] - data["Cash"]
 base_leverage = base_net_debt / data["EBITDA"] if data["EBITDA"] > 0 else 999.0
 stressed_leverage = base_net_debt / stressed_ebitda if stressed_ebitda > 0 else 999.0
 
-# 5. Asset Write-Down Coverage (Fixed Bug)
+# 6. Asset Write-Down Coverage
 stressed_asset_value = data["Total Assets"] * (1.0 - (asset_haircut_pct / 100.0))
 base_asset_coverage = (data["Total Assets"] / data["Total Debt"]) if data["Total Debt"] > 0 else 999.0
 stressed_asset_coverage = (stressed_asset_value / data["Total Debt"]) if data["Total Debt"] > 0 else 999.0
@@ -242,7 +245,8 @@ matrix_data = []
 for r_pct in repo_shocks:
     row = []
     for s_pct in spread_shocks:
-        sim_new_rate = (old_rate / 100.0) + (r_pct / 100.0) + (s_pct / 100.0)
+        # LTV Penalty is dynamically included here so the Asset Write-Down slider actively changes the matrix
+        sim_new_rate = (old_rate / 100.0) + (r_pct / 100.0) + (s_pct / 100.0) + (ltv_penalty_rate / 100.0)
         sim_cost_delta = maturing_debt * (sim_new_rate - (old_rate / 100.0))
         sim_tot_interest = simulated_base_interest + sim_cost_delta
         sim_icr = stressed_ebit / sim_tot_interest if sim_tot_interest > 0 else 0
@@ -263,7 +267,6 @@ def highlight_covenant_breaches(val):
     else:
         return 'background-color: #dcfce7; color: #166534' # Green (Safe)
 
-# Format with 'x' and handle both Pandas versions (.map vs .applymap)
 styler = df_matrix.style.format("{:.2f}x")
 if hasattr(styler, "map"):
     styled_matrix = styler.map(highlight_covenant_breaches)
