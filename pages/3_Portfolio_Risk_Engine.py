@@ -2,9 +2,9 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
-from scipy.stats import gaussian_kde
 
+# --- PAGE SETUP ---
+st.set_page_config(page_title="Portfolio Risk Engine", layout="wide")
 st.title("Portfolio Risk & Macro Stress Engine")
 st.caption("Institutional capital preservation, Value-at-Risk (VaR), and historical crisis stress-testing.")
 
@@ -36,17 +36,38 @@ if not np.isclose(sum(weights), 1.0):
     st.info("Weights normalized automatically to 100%.")
 
 # --- 2. DATA ACQUISITION & ENGINE MATH ---
-with st.spinner("Executing risk algorithms across historical datasets..."):
-    # Download 5 years of daily closing prices
-    raw_data = yf.download(tickers, period="5y", progress=False)['Close']
+with st.spinner("Executing risk algorithms and fetching 10-year market data..."):
+    # Download 10 years of data to capture the 2020 COVID crash, plus S&P 500 (^GSPC) for the Beta proxy
+    download_tickers = tickers + ['^GSPC']
+    raw_data = yf.download(download_tickers, period="10y", progress=False)['Close']
     
     if isinstance(raw_data, pd.Series):
-        raw_data = raw_data.to_frame(tickers[0])
+        raw_data = raw_data.to_frame(download_tickers[0])
         
     daily_returns = raw_data.pct_change().dropna()
     
-    # Portfolio daily returns series
-    portfolio_returns = daily_returns.dot(weights)
+    # Isolate Market Returns (S&P 500) and Portfolio Returns
+    market_returns = daily_returns['^GSPC'] if '^GSPC' in daily_returns.columns else None
+    
+    # Ensure we only use the portfolio tickers for the portfolio math
+    available_tickers = [t for t in tickers if t in daily_returns.columns]
+    
+    if not available_tickers:
+        st.error("Could not fetch data for the provided tickers.")
+        st.stop()
+        
+    # Re-normalize weights if some tickers failed to download
+    clean_weights = np.array([weights[tickers.index(t)] for t in available_tickers])
+    clean_weights = clean_weights / np.sum(clean_weights)
+    
+    portfolio_returns = daily_returns[available_tickers].dot(clean_weights)
+    
+    # Calculate Portfolio Beta (Risk relative to the broader market)
+    if market_returns is not None:
+        cov_matrix = np.cov(portfolio_returns, market_returns)
+        portfolio_beta = cov_matrix[0, 1] / cov_matrix[1, 1] if cov_matrix[1, 1] != 0 else 1.0
+    else:
+        portfolio_beta = 1.0
     
     # Core Risk Metrics
     var_95 = np.percentile(portfolio_returns, 5)
@@ -56,8 +77,6 @@ with st.spinner("Executing risk algorithms across historical datasets..."):
     ann_return = portfolio_returns.mean() * 252
     ann_volatility = portfolio_returns.std() * np.sqrt(252)
     risk_free_rate = 0.042  # 4.2% Benchmark
-    
-    sharpe_ratio = (ann_return - risk_free_rate) / ann_volatility if ann_volatility else 0
     
     # Downside deviation for Sortino Ratio
     downside_returns = portfolio_returns[portfolio_returns < 0]
@@ -97,110 +116,79 @@ with m_col4:
     st.metric(
         "Max Peak-to-Trough Drawdown", 
         f"{max_drawdown * 100:.2f}%", 
-        help="Worst loss experienced from historical peak to trough over 5 years."
+        help="Worst loss experienced from historical peak to trough over the last 10 years."
     )
 
-# --- 4. INTERACTIVE PLOTLY DISTRIBUTION (TAIL RISK) ---
+# --- 4. HISTORICAL CRISIS STRESS-TESTING ---
 st.divider()
-st.subheader("3. Interactive Tail-Risk Distribution")
-st.caption("Hover over the distribution curve to inspect frequencies. Shaded crimson area highlights extreme tail-risk loss days.")
-
-# Generate KDE Curve
-kde = gaussian_kde(portfolio_returns * 100)
-x_range = np.linspace((portfolio_returns * 100).min(), (portfolio_returns * 100).max(), 500)
-y_density = kde(x_range)
-
-fig = go.Figure()
-
-# Plot full density curve
-fig.add_trace(go.Scatter(
-    x=x_range, 
-    y=y_density, 
-    mode='lines', 
-    line=dict(color='#2563eb', width=2.5), 
-    name='Return Distribution'
-))
-
-# Shade Tail Risk Zone (< VaR 95%)
-x_tail = x_range[x_range <= (var_95 * 100)]
-y_tail = y_density[:len(x_tail)]
-fig.add_trace(go.Scatter(
-    x=np.concatenate(([x_tail[0]], x_tail, [x_tail[-1]])),
-    y=np.concatenate(([0], y_tail, [0])),
-    fill='toself',
-    fillcolor='rgba(239, 68, 68, 0.4)',
-    line=dict(color='rgba(239, 68, 68, 0.8)', width=1.5),
-    name=f'Tail Risk Zone (95% VaR: {var_95*100:.2f}%)'
-))
-
-# VaR Cutoff Threshold Line
-fig.add_vline(
-    x=var_95 * 100, 
-    line_dash="dash", 
-    line_color="#dc2626", 
-    annotation_text=f"VaR Cutoff: {var_95*100:.2f}%", 
-    annotation_position="top left"
-)
-
-fig.update_layout(
-    xaxis_title="Daily Return (%)",
-    yaxis_title="Probability Density",
-    margin=dict(l=20, r=20, t=30, b=20),
-    template="plotly_white",
-    hovermode="x unified",
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-)
-
-st.plotly_chart(fig, use_container_width=True)
-
-# --- 5. HISTORICAL CRISIS STRESS-TESTING ---
-st.divider()
-st.subheader("4. Historical Stress-Testing (Scenario Simulation)")
-st.caption("Estimated portfolio impact during recognized macroeconomic drawdown regimes.")
-
-# Filter returns by historical crisis windows
-covid_crash = portfolio_returns.loc['2020-02-19':'2020-03-23'] if '2020-02-19' in portfolio_returns.index else pd.Series(dtype=float)
-rate_hike_2022 = portfolio_returns.loc['2022-01-03':'2022-10-14'] if '2022-01-03' in portfolio_returns.index else pd.Series(dtype=float)
+st.subheader("3. Historical Stress-Testing (Macro Scenario Simulation)")
+st.caption(f"Estimated capital destruction during major market crashes. Pre-2016 crises are simulated using the portfolio's current Beta correlation ({portfolio_beta:.2f}) against historical S&P 500 drawdowns.")
 
 scenarios = []
 
-# COVID Crash Impact
-if not covid_crash.empty:
-    covid_drawdown = ((1 + covid_crash).cumprod().iloc[-1] - 1) * 100
-    scenarios.append({
-        "Macro Scenario": "2020 COVID-19 Flash Crash (Feb–Mar 2020)",
-        "Observed Impact (%)": f"{covid_drawdown:.2f}%",
-        "Estimated Capital Loss": f"${(portfolio_capital * abs(covid_drawdown)/100):,.0f}"
-    })
-
-# 2022 Rate Shock Impact
-if not rate_hike_2022.empty:
-    rate_drawdown = ((1 + rate_hike_2022).cumprod().iloc[-1] - 1) * 100
-    scenarios.append({
-        "Macro Scenario": "2022 Inflation & Rate Hike Shock (Jan–Oct 2022)",
-        "Observed Impact (%)": f"{rate_drawdown:.2f}%",
-        "Estimated Capital Loss": f"${(portfolio_capital * abs(rate_drawdown)/100):,.0f}"
-    })
-
-# Instant Shock Simulation
+# 1. Dot-Com Bubble (Simulated via Beta)
+# S&P 500 dropped ~49.1% from Mar 2000 to Oct 2002
+dot_com_impact = -0.491 * portfolio_beta
 scenarios.append({
-    "Macro Scenario": "Hypothetical Instant Market Shock (-5% Index Crash)",
-    "Observed Impact (%)": "-5.00%",
-    "Estimated Capital Loss": f"${(portfolio_capital * 0.05):,.0f}"
+    "Macro Scenario": "2000 Dot-Com Bubble Collapse (Mar 2000 – Oct 2002)",
+    "Observed / Simulated Impact (%)": f"{dot_com_impact * 100:.2f}%",
+    "Estimated Capital Loss": f"${(portfolio_capital * abs(dot_com_impact)):,.0f}",
+    "Data Source": "Beta Proxy (Simulated)"
+})
+
+# 2. Global Financial Crisis (Simulated via Beta)
+# S&P 500 dropped ~56.8% from Oct 2007 to Mar 2009
+gfc_impact = -0.568 * portfolio_beta
+scenarios.append({
+    "Macro Scenario": "2008 Global Financial Crisis (Oct 2007 – Mar 2009)",
+    "Observed / Simulated Impact (%)": f"{gfc_impact * 100:.2f}%",
+    "Estimated Capital Loss": f"${(portfolio_capital * abs(gfc_impact)):,.0f}",
+    "Data Source": "Beta Proxy (Simulated)"
+})
+
+# 3. COVID-19 Flash Crash (Actual Data)
+covid_crash = portfolio_returns.loc['2020-02-19':'2020-03-23'] if '2020-02-19' in portfolio_returns.index else pd.Series(dtype=float)
+if not covid_crash.empty:
+    covid_drawdown = (1 + covid_crash).cumprod().iloc[-1] - 1
+    scenarios.append({
+        "Macro Scenario": "2020 COVID-19 Flash Crash (Feb 2020 – Mar 2020)",
+        "Observed / Simulated Impact (%)": f"{covid_drawdown * 100:.2f}%",
+        "Estimated Capital Loss": f"${(portfolio_capital * abs(covid_drawdown)):,.0f}",
+        "Data Source": "Actual Portfolio Data"
+    })
+
+# 4. 2022 Inflation & Rate Hike Shock (Actual Data)
+rate_hike_2022 = portfolio_returns.loc['2022-01-03':'2022-10-14'] if '2022-01-03' in portfolio_returns.index else pd.Series(dtype=float)
+if not rate_hike_2022.empty:
+    rate_drawdown = (1 + rate_hike_2022).cumprod().iloc[-1] - 1
+    scenarios.append({
+        "Macro Scenario": "2022 Global Inflation Shock (Jan 2022 – Oct 2022)",
+        "Observed / Simulated Impact (%)": f"{rate_drawdown * 100:.2f}%",
+        "Estimated Capital Loss": f"${(portfolio_capital * abs(rate_drawdown)):,.0f}",
+        "Data Source": "Actual Portfolio Data"
+    })
+
+# 5. Hypothetical Flash Crash
+scenarios.append({
+    "Macro Scenario": "Hypothetical Instant Market Shock (-10% Index Crash)",
+    "Observed / Simulated Impact (%)": f"{-10.0 * portfolio_beta:.2f}%",
+    "Estimated Capital Loss": f"${(portfolio_capital * abs(0.10 * portfolio_beta)):,.0f}",
+    "Data Source": "Beta Proxy (Simulated)"
 })
 
 df_scenarios = pd.DataFrame(scenarios).set_index("Macro Scenario")
 st.table(df_scenarios)
+
 # --- 5. ESG & STEWARDSHIP SCREENING ---
 st.divider()
-st.subheader("5. ESG & Sustainability Risk Matrix")
+st.subheader("4. ESG & Sustainability Risk Matrix")
 st.caption("Responsible investment screening aligned with institutional mandates (e.g., CRISA 2, UN PRI). Simulated proxy scores demonstrate terminal architecture.")
 
 esg_records = []
 weighted_esg_total = 0.0
 
 # Generate consistent deterministic proxy data per ticker
-for t, w in zip(tickers, weights):
+for t, w in zip(available_tickers, clean_weights):
     seed = sum(ord(c) for c in t)
     np.random.seed(seed)
     e_score = round(np.random.uniform(5, 20), 1)
