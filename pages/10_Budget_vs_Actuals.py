@@ -21,12 +21,15 @@ with st.container(border=True):
     with col_period:
         st.markdown("**Reporting Period**")
         period_options = [
-            "September 2026 (YTD)", "August 2026 (YTD)", 
+            "January 2026", "February 2026", "March 2026", 
+            "April 2026", "May 2026", "June 2026", 
+            "July 2026", "August 2026", "September 2026", 
             "October 2026", "November 2026", "December 2026",
             "Q1 2026", "Q2 2026", "Q3 2026", "Q4 2026", 
             "FY 2025 (Full Year)"
         ]
-        period = st.selectbox("Select Period:", period_options)
+        # Default to October 2026 (Index 9)
+        period = st.selectbox("Select Period:", period_options, index=9)
         
     with col_div:
         st.markdown("**Business Division**")
