@@ -35,7 +35,7 @@ with st.container(border=True):
             receivables_shock = st.slider("Debtors (DSO) Change", -30, 30, 0, 1)
         with c2:
             payables_shock = st.slider("Creditor (DPO) Change", -30, 30, 0, 1)
-            borrowing_rate = st.number_input("Short-Term Borrowing Rate (%)", 1.0, 25.0, 11.5, 0.5)
+            borrowing_rate = st.number_input("Short-Term Borrowing Rate (%)", 1.0, 25.0, 10.0, 0.5)
 
 # --- 3. DATA ENGINE (DUAL MODE) ---
 @st.cache_data(ttl=3600)
@@ -116,7 +116,10 @@ base_funding_req = max(0, data["CCC"] * data["Daily_COGS"])
 new_funding_req = max(0, new_ccc * data["Daily_COGS"])
 
 funding_delta = new_funding_req - base_funding_req
-interest_cost = new_funding_req * (borrowing_rate / 100.0)
+# Fixed: Calculate Interest using the user input slider
+base_interest_cost = base_funding_req * (borrowing_rate / 100.0)
+new_interest_cost = new_funding_req * (borrowing_rate / 100.0)
+interest_delta = new_interest_cost - base_interest_cost
 
 # --- 5. EXECUTIVE DASHBOARD ---
 st.divider()
@@ -208,10 +211,10 @@ col_fund1, col_fund2 = st.columns(2)
 with col_fund1:
     st.info("**Capital Funding Requirement**")
     st.markdown(f"""
-    To sustain operations with a Cash Conversion Cycle of **{new_ccc:.0f} days**, the company requires a short-term liquidity bridge:
+    To sustain operations with a Cash Conversion Cycle of **{new_ccc:.0f} days**, the company requires a short-term liquidity bridge (overdraft):
     
     * **Required Facility:** `{sym}{new_funding_req:,.0f}`
-    * **Annual Interest Cost:** `{sym}{interest_cost:,.0f}`
+    * **Annual Interest Cost:** `{sym}{new_interest_cost:,.0f}` (at {borrowing_rate}%)
     
     *If sales volume spikes unexpectedly without securing this facility, the company faces severe **Overtrading** risk.*
     """)
@@ -220,12 +223,14 @@ with col_fund2:
     if new_ccc > data["CCC"]:
         st.error("**Risk Alert: Widening Cash Gap**")
         st.markdown(f"Your adjusted policies have increased the cash gap by **{ccc_delta:.0f} days**. You now require an additional **{sym}{funding_delta:,.0f}** in short-term working capital compared to the baseline.")
+        st.markdown(f"🔴 **This policy increases annual interest costs by {sym}{interest_delta:,.0f}**.")
     elif new_ccc <= 0:
         st.success("**Operational Excellence: Negative CCC**")
         st.markdown(f"The company is operating with a negative cycle. Suppliers are completely funding the business's inventory and sales. Zero short-term working capital facilities are required.")
     else:
         st.success("**Optimization Achieved**")
         st.markdown(f"Your adjusted policies have shrunk the cash gap by **{abs(ccc_delta):.0f} days**, freeing up **{sym}{abs(funding_delta):,.0f}** in trapped cash. This reduces reliance on expensive short-term debt.")
+        st.markdown(f"🟢 **This policy saves {sym}{abs(interest_delta):,.0f} in annual interest costs.**")
         
 # --- 8. WORKING CAPITAL SUB-LEDGER DRILL-DOWN ---
 st.divider()
