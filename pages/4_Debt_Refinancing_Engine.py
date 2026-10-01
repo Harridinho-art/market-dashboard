@@ -7,8 +7,8 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="Credit & Refinancing Engine", layout="wide")
 st.title("Credit Risk & Debt Refinancing Engine")
 st.markdown(
-    "Institutional credit stress-testing: debt maturity cliffs, credit spread blowouts, "
-    "bank covenant headroom, and collateral haircuts."
+    "Stress-test corporate debt: analyze how rising interest rates, lender penalties, "
+    "and dropping profits affect the company's ability to survive and pay off its loans."
 )
 
 # --- 1. SIDEBAR: MULTI-DIMENSIONAL CREDIT SHOCKS ---
@@ -19,41 +19,41 @@ ticker = st.sidebar.text_input("Ticker Symbol:", value="EXX.JO").upper()
 st.sidebar.divider()
 st.sidebar.subheader("1. Debt Maturity & Refinancing")
 refinance_pct = st.sidebar.slider(
-    "Debt Expiring in Cycle (%)", 
+    "Debt Expiring Soon (%)", 
     min_value=10, max_value=100, value=35, step=5,
-    help="Percentage of total balance sheet debt maturing and needing refinancing."
+    help="Percentage of the company's total debt that is expiring and must be replaced with new loans."
 )
 old_rate = st.sidebar.slider(
-    "Historical Borrowing Cost (%)", 
+    "Current Average Interest Rate (%)", 
     min_value=1.0, max_value=15.0, value=6.5, step=0.25,
-    help="The blended interest rate secured on existing facilities."
+    help="The average interest rate the company is currently paying on its existing debt."
 )
 
 st.sidebar.divider()
-st.sidebar.subheader("2. Macro & Credit Spread Shocks")
+st.sidebar.subheader("2. Interest Rate Shocks")
 base_rate_shock_bps = st.sidebar.slider(
-    "Central Bank Rate Hike (bps)", 
-    min_value=0, max_value=500, value=150, step=25,
-    help="100 bps = 1.0%. Simulates SARB / benchmark rate tightening."
-) / 10000
+    "Central Bank Rate Hike (%)", 
+    min_value=0.0, max_value=5.0, value=1.5, step=0.25,
+    help="Simulates the Central Bank raising national interest rates (e.g., 1.5% = 150 basis points)."
+) 
 
 credit_spread_bps = st.sidebar.slider(
-    "Credit Spread / Transition Penalty (bps)", 
-    min_value=0, max_value=600, value=250, step=25,
-    help="Credit risk premium or bank GLAA restriction penalty above benchmark."
-) / 10000
+    "Lender Risk Penalty (%)", 
+    min_value=0.0, max_value=6.0, value=2.5, step=0.25,
+    help="Extra interest charged by the bank because they view the company as high-risk."
+) 
 
 st.sidebar.divider()
-st.sidebar.subheader("3. Asset & Operational Shock")
+st.sidebar.subheader("3. Business & Asset Shocks")
 ebitda_shock_pct = st.sidebar.slider(
-    "EBITDA / Profit Shock (%)", 
+    "Operating Profit Drop (%)", 
     min_value=-50, max_value=10, value=-15, step=5,
-    help="Simulates market downturn or demand drop hitting operating earnings."
+    help="Simulates a market crash or loss of sales hurting the company's core operating profit."
 )
 asset_haircut_pct = st.sidebar.slider(
-    "Collateral / Asset Haircut (%)", 
+    "Asset Value Write-Down (%)", 
     min_value=0, max_value=50, value=20, step=5,
-    help="Simulates asset stranding, depreciation, or liquidation discount on assets."
+    help="Simulates the bank deciding the company's assets (collateral) are suddenly worth less than reported."
 )
 
 # --- 2. DATA EXTRACTION ENGINE ---
@@ -107,12 +107,15 @@ if not data or data["Total Debt"] == 0:
 sym = data["Symbol"]
 
 # --- 3. REFINANCING MATHEMATICS ---
+# Apply the "Current Average Interest Rate" slider directly to the baseline math to fix the bug
+simulated_base_interest = data["Total Debt"] * (old_rate / 100.0)
+
 # 1. Maturing Debt Volume
 maturing_debt = data["Total Debt"] * (refinance_pct / 100.0)
 untouched_debt = data["Total Debt"] - maturing_debt
 
-# 2. Refinanced Borrowing Rate: Old Base + Central Bank Shock + Credit Spread Blowout
-new_refinanced_rate = (old_rate / 100.0) + base_rate_shock_bps + credit_spread_bps
+# 2. Refinanced Borrowing Rate: Old Base + Central Bank Shock + Lender Penalty
+new_refinanced_rate = (old_rate / 100.0) + (base_rate_shock_bps / 100.0) + (credit_spread_bps / 100.0)
 
 # 3. Interest Cost Evolution
 old_maturing_interest = maturing_debt * (old_rate / 100.0)
@@ -120,22 +123,22 @@ new_maturing_interest = maturing_debt * new_refinanced_rate
 refinancing_cost_delta = new_maturing_interest - old_maturing_interest
 
 # Total New Annual Interest
-stressed_total_interest = data["Base Interest"] + refinancing_cost_delta
+stressed_total_interest = simulated_base_interest + refinancing_cost_delta
 
 # 4. Earnings & Coverage Shocks
 stressed_ebitda = data["EBITDA"] * (1.0 + (ebitda_shock_pct / 100.0))
 stressed_ebit = data["EBIT"] * (1.0 + (ebitda_shock_pct / 100.0))
 stressed_net_income = data["Net Income"] - refinancing_cost_delta
 
-# Solvency Covenants
-base_icr = data["EBIT"] / data["Base Interest"] if data["Base Interest"] > 0 else 999.0
+# Solvency Ratios
+base_icr = data["EBIT"] / simulated_base_interest if simulated_base_interest > 0 else 999.0
 stressed_icr = stressed_ebit / stressed_total_interest if stressed_total_interest > 0 else 999.0
 
 base_net_debt = data["Total Debt"] - data["Cash"]
 base_leverage = base_net_debt / data["EBITDA"] if data["EBITDA"] > 0 else 999.0
 stressed_leverage = base_net_debt / stressed_ebitda if stressed_ebitda > 0 else 999.0
 
-# 5. Collateral & Stranded Asset Coverage
+# 5. Asset Write-Down Coverage (Fixed Bug)
 stressed_asset_value = data["Total Assets"] * (1.0 - (asset_haircut_pct / 100.0))
 base_asset_coverage = (data["Total Assets"] / data["Total Debt"]) if data["Total Debt"] > 0 else 999.0
 stressed_asset_coverage = (stressed_asset_value / data["Total Debt"]) if data["Total Debt"] > 0 else 999.0
@@ -150,65 +153,68 @@ with b1:
 with b2:
     st.metric("Cash & Equivalents", f"{sym}{data['Cash']:,.0f}")
 with b3:
-    st.metric("Maturing Debt Under Test", f"{sym}{maturing_debt:,.0f}", f"{refinance_pct}% of Book")
+    st.metric("Expiring Debt to Replace", f"{sym}{maturing_debt:,.0f}", f"{refinance_pct}% of Book")
 with b4:
-    st.metric("New Refinanced Rate", f"{new_refinanced_rate * 100:.2f}%", f"+{(new_refinanced_rate - (old_rate/100))*10000:.0f} bps")
+    st.metric("New Refinanced Rate", f"{new_refinanced_rate * 100:.2f}%", f"+{(new_refinanced_rate - (old_rate/100))*100:.2f}% vs Base")
 
 st.divider()
-st.subheader("1. Institutional Covenant Health Check")
-st.caption("Standard commercial banking limits: Interest Coverage Ratio (ICR) >= 2.5x | Leverage <= 3.5x.")
+st.subheader("1. Banking Agreement (Covenant) Health Check")
+st.caption("Standard commercial banking limits. If ratios drop below limits, the bank can call the loan or force bankruptcy.")
 
 c1, c2, c3 = st.columns(3)
 with c1:
     icr_status = "Safe" if stressed_icr >= 3.0 else ("Borderline" if stressed_icr >= 2.5 else "CRITICAL BREACH")
     st.metric(
-        "Stressed Interest Cover (ICR)", 
+        "Profit vs Interest (Coverage Ratio)", 
         f"{stressed_icr:.2f}x", 
         f"Baseline: {base_icr:.2f}x ({icr_status})",
-        delta_color="normal" if stressed_icr >= 2.5 else "inverse"
+        delta_color="normal" if stressed_icr >= 2.5 else "inverse",
+        help="How many times the company's operating profit can pay its interest bill. Banks usually require a minimum of 2.5x."
     )
 with c2:
     lev_status = "Safe" if stressed_leverage <= 3.0 else ("Elevated" if stressed_leverage <= 3.5 else "CRITICAL BREACH")
     st.metric(
-        "Stressed Leverage (Net Debt/EBITDA)", 
+        "Total Debt vs Profit (Leverage Ratio)", 
         f"{stressed_leverage:.2f}x", 
         f"Baseline: {base_leverage:.2f}x ({lev_status})",
-        delta_color="normal" if stressed_leverage <= 3.5 else "inverse"
+        delta_color="normal" if stressed_leverage <= 3.5 else "inverse",
+        help="How many years of current profit it would take to pay off all debt. Banks usually restrict this to 3.5x maximum."
     )
 with c3:
     cov_status = "Adequate" if stressed_asset_coverage >= 1.5 else "Collateral Risk"
     st.metric(
-        "Stressed Asset Coverage", 
+        "Asset vs Debt (Collateral Coverage)", 
         f"{stressed_asset_coverage:.2f}x", 
-        f"Haircut Value: {sym}{stressed_asset_value:,.0f}",
-        delta_color="normal" if stressed_asset_coverage >= 1.5 else "inverse"
+        f"Discounted Asset Value: {sym}{stressed_asset_value:,.0f}",
+        delta_color="normal" if stressed_asset_coverage >= 1.5 else "inverse",
+        help="The value of the company's assets compared to its total debt, after applying the Write-Down penalty."
     )
 
 # --- 5. SECTION 2: THE REFINANCING EARNINGS DRAIN ---
 st.divider()
-st.subheader("2. Refinancing Cost Drag & Profit Drain")
-st.caption("Annual incremental interest expense required to service the debt maturity wall.")
+st.subheader("2. The True Cost of Refinancing Debt")
+st.caption("How much extra cash the company will lose every year just to service the new, more expensive loans.")
 
 col_left, col_right = st.columns([1, 2])
 
 with col_left:
-    st.metric("New Incremental Interest Cost", f"{sym}{refinancing_cost_delta:,.0f}")
-    st.metric("Total Stressed Interest Burden", f"{sym}{stressed_total_interest:,.0f}")
+    st.metric("New Extra Interest Cost (Annual)", f"{sym}{refinancing_cost_delta:,.0f}")
+    st.metric("Total Interest Burden (Annual)", f"{sym}{stressed_total_interest:,.0f}")
     earnings_wipeout_pct = (refinancing_cost_delta / data["Net Income"] * 100) if data["Net Income"] > 0 else 0
-    st.metric("Net Earnings Erosion", f"{earnings_wipeout_pct:.1f}%", delta_color="inverse")
+    st.metric("Net Profit Wiped Out", f"{earnings_wipeout_pct:.1f}%", delta_color="inverse")
 
 with col_right:
     fig_bar = go.Figure()
     fig_bar.add_trace(go.Bar(
-        name="Operating Profit (EBIT)",
-        x=["Baseline Scenario", "Refinanced Stress Scenario"],
+        name="Operating Profit",
+        x=["Normal (Baseline Scenario)", "After Interest Shock (Stress Scenario)"],
         y=[data["EBIT"], stressed_ebit],
         marker_color="#2563eb"
     ))
     fig_bar.add_trace(go.Bar(
-        name="Total Debt Service (Interest)",
-        x=["Baseline Scenario", "Refinanced Stress Scenario"],
-        y=[data["Base Interest"], stressed_total_interest],
+        name="Total Interest Bill",
+        x=["Normal (Baseline Scenario)", "After Interest Shock (Stress Scenario)"],
+        y=[simulated_base_interest, stressed_total_interest],
         marker_color="#ef4444"
     ))
     fig_bar.update_layout(
@@ -220,32 +226,33 @@ with col_right:
     )
     st.plotly_chart(fig_bar, use_container_width=True)
 
-# --- 6. SECTION 3: INSTITUTIONAL SENSITIVITY MATRIX (SARB / PRUDENTIAL VIEW) ---
+# --- 6. SECTION 3: INSTITUTIONAL SENSITIVITY MATRIX ---
 st.divider()
-st.subheader("3. Macro Stress Matrix: Interest Coverage Ratio (ICR)")
+st.subheader("3. Macro Stress Matrix: Solvency Survival")
 st.caption(
-    "Evaluating borrower solvency under simultaneous SARB Repo rate hikes and credit spread blowouts. "
-    "Values below 2.5x represent technical debt covenant default."
+    "Evaluating if the company survives simultaneous Central Bank Rate Hikes and Lender Risk Penalties. "
+    "Values below 2.5x mean the company fails its banking agreements (Covenant Breach)."
 )
 
-repo_shocks = [0, 100, 200, 300, 400] # in bps
-spread_shocks = [0, 100, 200, 300, 400, 500] # in bps
+# Changed from BPS to percentages for plain-English UX
+repo_shocks = [0.0, 1.0, 2.0, 3.0, 4.0] 
+spread_shocks = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0] 
 
 matrix_data = []
-for r_bps in repo_shocks:
+for r_pct in repo_shocks:
     row = []
-    for s_bps in spread_shocks:
-        sim_new_rate = (old_rate / 100.0) + (r_bps / 10000.0) + (s_bps / 10000.0)
+    for s_pct in spread_shocks:
+        sim_new_rate = (old_rate / 100.0) + (r_pct / 100.0) + (s_pct / 100.0)
         sim_cost_delta = maturing_debt * (sim_new_rate - (old_rate / 100.0))
-        sim_tot_interest = data["Base Interest"] + sim_cost_delta
+        sim_tot_interest = simulated_base_interest + sim_cost_delta
         sim_icr = stressed_ebit / sim_tot_interest if sim_tot_interest > 0 else 0
         row.append(round(sim_icr, 2))
     matrix_data.append(row)
 
 df_matrix = pd.DataFrame(
     matrix_data,
-    index=[f"+{r} bps Repo" for r in repo_shocks],
-    columns=[f"+{s} bps Spread" for s in spread_shocks]
+    index=[f"+{r}% Rate Hike" for r in repo_shocks],
+    columns=[f"+{s}% Lender Penalty" for s in spread_shocks]
 )
 
 def highlight_covenant_breaches(val):
@@ -264,4 +271,4 @@ else:
     styled_matrix = styler.applymap(highlight_covenant_breaches)
 
 st.dataframe(styled_matrix, use_container_width=True)
-st.caption("Legend: 🟩 Safe (≥ 3.0x) | 🟨 Borderline (2.5x - 3.0x) | 🟥 Covenant Breach (< 2.5x)")
+st.caption("Legend: 🟩 Safe (≥ 3.0x) | 🟨 Borderline (2.5x - 3.0x) | 🟥 Bank Agreement Failure (< 2.5x)")
